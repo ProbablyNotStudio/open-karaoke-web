@@ -1,18 +1,19 @@
-import {loadingDeadline} from './loading.js?v=33';
-import {readMidi} from './midi-loader.js?v=33';
-import {lyricPresentation,lyricFill} from './lyrics.js?v=33';
-import {parseName,parseMidi,parseLRC} from './formats.js?v=33';
-import {SoundFontSynth} from './soundfont-synth.js?v=33';
-import {MAX_SOUNDFONT_BYTES,validateSoundFont,validateSoundFontHeader,downloadSoundFont} from './soundfonts.js?v=33';
+import {loadingDeadline} from './loading.js?v=34';
+import {readMidi} from './midi-loader.js?v=34';
+import {lyricPresentation,lyricFill} from './lyrics.js?v=34';
+import {parseName,parseMidi,parseLRC} from './formats.js?v=34';
+import {SoundFontSynth} from './soundfont-synth.js?v=34';
+import {MAX_SOUNDFONT_BYTES,validateSoundFont,validateSoundFontHeader,downloadSoundFont} from './soundfonts.js?v=34';
 import {CDGDecoder} from './cdg.js';
-import {SUPPORTED,MIDI,unpackZip,songFormat} from './library.js?v=33';
-import {libraryPage,searchText,createSongOrder} from './search.js?v=33';
-import {saveLocalFiles,loadLocalFiles,getLocalFile,clearLocalLibrary} from './storage.js?v=33';
-import {cachedSoundFont} from './font-cache.js?v=33';
-import {runImportBatches,importQueue} from './import-batch.js?v=33';
-import {songbookPage} from './catalog.js?v=33';
-import {setupBackgrounds} from './backgrounds.js?v=33';
-import {folderFiles,songFolderSelection} from './folder.js?v=33';
+import {SUPPORTED,MIDI,unpackZip,songFormat} from './library.js?v=34';
+import {libraryPage,searchText,createSongOrder} from './search.js?v=34';
+import {saveLocalFiles,loadLocalFiles,getLocalFile,clearLocalLibrary} from './storage.js?v=34';
+import {cachedSoundFont} from './font-cache.js?v=34';
+import {runImportBatches,importQueue} from './import-batch.js?v=34';
+import {songbookPage} from './catalog.js?v=34';
+import {setupBackgrounds} from './backgrounds.js?v=34';
+import {folderFiles,songFolderSelection} from './folder.js?v=34';
+import {storedMidiFile, fileDigest} from './import-memory.js?v=34';
 let bookPage=0,bookLetter='all';
 let sessionEpoch=0,songAbort=null,leadIn=null;
 function songPhase(message,token){if(token===loadToken)$('stageStatus').textContent=message;}
@@ -116,12 +117,15 @@ const queueImport=importQueue(performImport);
 function importFiles(selected,options={}){return options.restore?performImport(Array.from(selected),options):queueImport(selected,options);}
 async function performImport(selected,{silent=false,restore=false}={}){
   if(!restore)await localLibraryReady;
-  const epoch=sessionEpoch,companions=[];let count=0,errors=[],saveFailed=false;
+  const epoch=sessionEpoch,companions=[];let count=0,skipped=0,errors=[],saveFailed=false;
+  const hashes=new Set([...songs.values()].map(song=>song.digest).filter(Boolean));
+  const candidates=new Map();
+  for(const file of files.values()){const key=file.name.toLowerCase()+':'+file.size;if(!candidates.has(key))candidates.set(key,[]);candidates.get(key).push(file);}
   const active=!silent;
   if(active){$('importProgress').hidden=false;for(const id of ['import','emptyImport','folderImport'])$(id).disabled=true;}
   try{
     await runImportBatches(selected,{
-      expand:unpackZip,onIssue:issue=>errors.push(issue),
+      size:25,expand:unpackZip,onIssue:issue=>errors.push(issue),
       onProgress:({name,input,inputs,processed,total})=>{if(active)$('importProgress').textContent=`Importing ${input} of ${inputs}: ${name}${total?` · ${processed.toLocaleString()} / ${total.toLocaleString()} files`:''} · ${count.toLocaleString()} songs added. Keep this tab open.`;},
       consume:async entries=>{
         if(epoch!==sessionEpoch)throw Error('Import canceled because the library was reset.');
@@ -133,16 +137,24 @@ async function performImport(selected,{silent=false,restore=false}={}){
           const id=(source+':'+path).toLowerCase(),ext=file.name.split('.').pop().toLowerCase();
           const existing=songs.get(id),metadata={...parseName(file.name,existing?Number(existing.number):songs.size+1),...details,format:songFormat(file.name)};
           try{
+            let digest=details.digest;
+            if(!restore&&source==='local'&&!['cdg','lrc'].includes(ext)){
+              digest=await fileDigest(file,entry.buffer);
+              let duplicate=hashes.has(digest);
+              if(!duplicate)for(const previous of candidates.get(file.name.toLowerCase()+':'+file.size)||[]){if(await fileDigest(previous)===digest){duplicate=true;break;}}
+              if(duplicate){skipped++;continue;}
+            }
             if(MIDI.test(file.name)){
               const midi=entry.deferMidi?null:parseMidi(entry.buffer||await file.arrayBuffer(),{textEncoding:preferences.textEncoding,metadataOnly:true});
-              files.set(id,file);const song={id,file,path,source,...metadata};songs.set(id,song);if(midi)updateMidiMetadata(song,midi);count++;
+              files.set(id,file);const song={id,file,path,source,...metadata};songs.set(id,song);song.digest=digest;if(midi)updateMidiMetadata(song,midi);count++;
               if(midi?.compatibility?.skippedEvents)errors.push({path,status:'Recovered',reason:`Added using MIDI compatibility mode. ${midi.compatibility.skippedEvents} invalid event(s) were skipped; some musical details may differ. You do not need to reimport this file.`});
-            }else{files.set(id,file);if(!['cdg','lrc'].includes(ext)){songs.set(id,{id,file,path,source,...metadata});count++;}else companions.push({id,path,file});}
-            if(source==='local')records.push({id,file,path,source,details:songs.has(id)?(({title,artist,number})=>({title,artist,number}))(songs.get(id)):details});
+            }else{files.set(id,file);if(!['cdg','lrc'].includes(ext)){songs.set(id,{id,file,path,source,...metadata,digest});count++;}else companions.push({id,path,file});}
+            if(source==='local')records.push({id,file,path,source,details:songs.has(id)?(({title,artist,number,digest})=>({title,artist,number,digest}))(songs.get(id)):details});
+            if(digest)hashes.add(digest);
           }catch(error){errors.push({path,reason:error.message,status:'Failed'});}
         }
         if(epoch!==sessionEpoch)throw Error('Import canceled because the library was reset.');
-        if(!restore&&records.length){try{await saveLocalFiles('songs',records);}catch{saveFailed=true;errors.push({path:`Saving files: ${records[0].path} … ${records.at(-1).path}`,reason:'Browser storage is full or unavailable. These files work this session, but may need importing again after reloading.',status:'Not saved'});}}
+        if(!restore&&records.length){try{await saveLocalFiles('songs',records);for(const record of records){if(MIDI.test(record.file.name)){const lazy=storedMidiFile(record,getLocalFile);files.set(record.id,lazy);const song=songs.get(record.id);if(song)song.file=lazy;}}}catch{saveFailed=true;errors.push({path:`Saving files: ${records[0].path} … ${records.at(-1).path}`,reason:'Browser storage is full or unavailable. These files work this session, but may need importing again after reloading.',status:'Not saved'});}}
         // Give the browser time to paint progress and release temporary MIDI data.
         await new Promise(resolve=>setTimeout(resolve,0));
       }
@@ -152,7 +164,7 @@ async function performImport(selected,{silent=false,restore=false}={}){
     for(const entry of companions)if(files.get(entry.id)===entry.file&&!paired.has(entry.file))errors.push({path:entry.path,status:'Needs audio',reason:'Added, but no matching audio file was found. Add the audio with the same filename stem in the same folder.'});
     renderLibrary();renderQueue();
     if(!restore)$('storageStatus').textContent=saveFailed?'Some files could not be saved. See the import results.':'Your songs and SoundFonts are saved in this browser.';
-    if(active){$('importProgress').textContent=`Finished ${selected.length} selected file(s)/ZIP(s): ${count.toLocaleString()} songs added. Library total: ${songs.size.toLocaleString()}.${errors.length?` ${errors.length.toLocaleString()} items need attention.`:''}`;toast(`${count.toLocaleString()} song(s) added.${errors.length?' Some files need attention.':''}`);if(errors.length)showImportReport(count,errors);}
+    if(active){$('importProgress').textContent=`Finished ${selected.length} selected file(s)/ZIP(s): ${count.toLocaleString()} songs added. ${skipped.toLocaleString()} duplicate files skipped. Library total: ${songs.size.toLocaleString()}.${errors.length?` ${errors.length.toLocaleString()} items need attention.`:''}`;toast(`${count.toLocaleString()} song(s) added.${errors.length?' Some files need attention.':''}`);if(errors.length)showImportReport(count,errors);}
     return {count,errors};
   }catch(error){renderLibrary();renderQueue();if(active){$('importProgress').textContent=`Import stopped: ${error.message}`;errors.push({path:'Import batch',reason:error.message,status:'Failed'});showImportReport(count,errors);}return {count,errors};}
   finally{if(active)for(const id of ['import','emptyImport','folderImport'])$(id).disabled=false;}
@@ -314,7 +326,7 @@ function fontOptions(){
 }
 async function loadFontCatalog(){
   try{
-    const response=await fetch(new URL('../soundfonts.json?v=33',import.meta.url),{signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error('No included fonts');
+    const response=await fetch(new URL('../soundfonts.json?v=34',import.meta.url),{signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error('No included fonts');
     const catalog=await response.json();
     for(const font of catalog.fonts||[]){const url=new URL(font.url,new URL('../soundfonts.json',import.meta.url));if(typeof font.id==='string'&&typeof font.name==='string'&&Number.isSafeInteger(font.bytes)&&font.bytes>=12&&font.bytes<=MAX_SOUNDFONT_BYTES&&url.protocol==='https:')fonts.set(font.id,{...font,url:url.href});}
     if(fonts.has('karaoke-king')){
@@ -389,7 +401,7 @@ renderLibrary();renderQueue();updateControls();requestAnimationFrame(frame);if(l
 $('libraryInfo').textContent='Add your own MIDI, ZIP, audio + CDG, or video files. Songs stay on your device.';
 async function restoreLocalLibrary(){
  try{
-  const results=await Promise.allSettled([loadLocalFiles('songs',{onProgress:count=>{$('storageStatus').textContent=`Reading saved songs: ${count.toLocaleString()}…`;}}),loadLocalFiles('fonts')]);
+  const results=await Promise.allSettled([loadLocalFiles('songs',{mapRecord:record=>MIDI.test(record.file.name)?{...record,file:storedMidiFile(record,getLocalFile)}:record,onProgress:count=>{$('storageStatus').textContent=`Reading saved songs: ${count.toLocaleString()}…`;}}),loadLocalFiles('fonts')]);
   const savedSongs=results[0].status==='fulfilled'?results[0].value:[];
   const personalFonts=(results[1].status==='fulfilled'?results[1].value:[]).filter(font=>!font.hosted);
   for(const font of personalFonts)fonts.set(font.id,font);

@@ -27,11 +27,11 @@ export function createLibraryStorage({database=()=>globalThis.indexedDB,keyRange
   });
  }
  async function saveLocalFiles(store,records){if(records.length)await transaction(store,'readwrite',tx=>{for(const record of records)tx.objectStore(store).put(record);});}
- async function loadLocalFiles(store,{onProgress=()=>{},batchSize=store==='songs'?500:10}={}){
+ async function loadLocalFiles(store,{onProgress=()=>{},batchSize=store==='songs'?100:10,mapRecord=record=>record}={}){
   const records=[];let after;
   do{
    const page=await transaction(store,'readonly',(tx,set,fail)=>{const request=tx.objectStore(store).getAll(after===undefined?null:keyRange().lowerBound(after,true),batchSize);request.onsuccess=()=>set(request.result);request.onerror=()=>fail(request.error);});
-   records.push(...page);onProgress(records.length);
+   records.push(...page.map(mapRecord));onProgress(records.length);
    if(page.length<batchSize)break;
    after=page.at(-1).id;
    // Give the interface a chance to display progress between batches.

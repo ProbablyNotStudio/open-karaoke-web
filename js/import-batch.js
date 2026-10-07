@@ -19,6 +19,7 @@ export async function runImportBatches(selected,{expand,consume,onIssue=()=>{},o
   for(const issue of entries.issues||[])onIssue(issue);
   for(let start=0;start<entries.length;start+=size){
    await consume(entries.slice(start,start+size));
+   entries.fill(null,start,Math.min(start+size,entries.length));
    onProgress({name,input:i+1,inputs:inputs.length,processed:Math.min(start+size,entries.length),total:entries.length});
   }
  }
