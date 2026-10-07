@@ -33,3 +33,24 @@
 .import-progress{border:1px solid var(--line);border-radius:8px;background:#211b30;padding:14px 18px;margin-bottom:24px;font-size:12px;overflow-wrap:anywhere}
 
 .background-settings{border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:20px}.background-settings select{max-width:60%}.background-settings h3{margin-top:14px}.stage #backgroundVideo{object-fit:cover;z-index:0;background:transparent}.stage.has-background:after{content:"";position:absolute;inset:0;background:linear-gradient(#10091a55,#10091aaa);z-index:1;pointer-events:none}.stage.has-background .stage-content{text-shadow:0 2px 6px #000}.stage #video{z-index:2}
+
+/* Lyrics are sized against the stage, with the same outline on both layers. */
+.stage{container-type:inline-size}
+.stage.playing .stage-content{padding:54px 28px 48px;gap:8px}
+.stage.playing .stage-content .lyrics{--lyric-size:clamp(22px,4.8cqw,56px);font:750 calc(var(--lyric-size)*var(--lyric-scale,1))/1.3 "Segoe UI",Arial,sans-serif;letter-spacing:.01em;display:flex;flex-direction:column;gap:.28em;margin-top:auto;margin-bottom:0;padding:6px 0;width:100%;text-shadow:none}
+.karaoke-line{width:100%;white-space:nowrap;animation:none;padding:3px 6px;min-height:1.3em;filter:drop-shadow(0 3px 4px #000b)}
+.karaoke-word{white-space:pre}
+.karaoke-base,.karaoke-fill{-webkit-text-stroke:.085em #10131c;paint-order:stroke fill;text-shadow:none}
+.karaoke-base{color:#fffdf5}
+.karaoke-fill{color:#72e6ff;white-space:pre}
+.stage.playing[data-lines="4"] .stage-content .lyrics{--lyric-size:clamp(18px,3.2cqw,38px);font-size:calc(var(--lyric-size)*var(--lyric-scale,1));gap:.14em}
+.stage:fullscreen .stage-content{padding:7vh 5vw 9vh}
+.stage:fullscreen .stage-content .lyrics{--lyric-size:clamp(30px,4.8cqw,100px);font-size:calc(var(--lyric-size)*var(--lyric-scale,1));margin-bottom:0}
+.stage:fullscreen[data-lines="4"] .stage-content .lyrics{--lyric-size:clamp(24px,3.4cqw,70px)}
+.stage.has-background:after{background:linear-gradient(180deg,#080c161c 0%,#080c1600 35%,#080c1666 65%,#080c16cc 100%)}
+.stage.playing:not(.singing) .stage-content h2{font-size:clamp(25px,4.2cqw,64px);line-height:1.15;max-width:90%;text-wrap:balance;color:#fffdf5}
+.stage.playing:not(.singing) .stage-content>p{color:#e4e1ec;font-size:clamp(12px,1.6cqw,22px)}
+.lyric-countdown{left:8%;bottom:38%;font-size:clamp(32px,5cqw,76px);color:#ffe39a;text-shadow:0 2px 8px #000a}
+.background-scope{background:#c3a7ff0a;border-left:2px solid #c3a7ff77;border-radius:0 6px 6px 0;padding:10px 12px;margin:12px 0;color:#cfc4df}
+.background-settings select{width:60%;max-width:60%}
+@media(max-width:560px){.stage.playing .stage-content{padding:48px 14px 42px}.background-settings label{align-items:flex-start;flex-direction:column;gap:8px}.background-settings select{width:100%;max-width:100%}}

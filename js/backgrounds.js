@@ -1,21 +1,40 @@
-import {saveLocalFiles,loadLocalFiles,clearLocalFiles} from './storage.js?v=30';
-export function chooseBackground(items,selection,previous,random=Math.random){
+import {saveLocalFiles,loadLocalFiles,clearLocalFiles} from './storage.js?v=31';
+const normalizedPath=path=>String(path||'').replace(/\\/g,'/');
+export function folderBackgrounds(items,folder='all'){
+ if(folder==='all')return items;
+ const prefix=normalizedPath(folder).toLowerCase()+'/';
+ return items.filter(item=>normalizedPath(item.path).toLowerCase().startsWith(prefix));
+}
+export function backgroundFolders(items){
+ const folders=new Map();
+ for(const item of items){const parts=normalizedPath(item.path).split('/');parts.pop();for(let depth=1;depth<=parts.length;depth++){const path=parts.slice(0,depth).join('/'),key=path.toLowerCase();const entry=folders.get(key)||{path,count:0};entry.count++;folders.set(key,entry);}}
+ return [...folders.values()].sort((a,b)=>a.path.localeCompare(b.path,undefined,{numeric:true,sensitivity:'base'}));
+}
+export function chooseBackground(items,selection,previous,random=Math.random,folder='all'){
+ items=folderBackgrounds(items,folder);
  if(selection==='none')return null;
  if(selection!=='random')return items.find(item=>item.id===selection)||null;
  const candidates=items.length>1?items.filter(item=>item.id!==previous):items;
  return candidates.length?candidates[Math.min(candidates.length-1,Math.floor(random()*candidates.length))]:null;
 }
-export function setupBackgrounds({getSelection,setSelection,report}){
+export function setupBackgrounds({getSelection,setSelection,getFolder=()=> 'all',setFolder=()=>{},report}){
  const $=id=>document.getElementById(id),video=$('backgroundVideo'),items=new Map();
  let previous=null,url=null,active=false,visible=true,revision=0;
  const controls=['backgroundImport','backgroundFolderImport','backgroundClear'];
  const busy=value=>controls.forEach(id=>$(id).disabled=value);
  function render(){
+  const all=[...items.values()],folderSelect=$('backgroundFolderSelect');folderSelect.replaceChildren(new Option('All videos','all'));
+  for(const folder of backgroundFolders(all))folderSelect.append(new Option(`${folder.path} (${folder.count})`,folder.path));
+  folderSelect.value=getFolder();if(!folderSelect.value){folderSelect.value='all';setFolder('all');}
+  const available=folderBackgrounds(all,getFolder());
   const select=$('backgroundSelect');select.replaceChildren();
-  for(const [value,label] of [['none','No background'],['random','Random video for each song'],...[...items.values()].map(item=>[item.id,item.path])]){
+  for(const [value,label] of [['none','No background'],['random','Random video for each song']]){
    const option=document.createElement('option');option.value=value;option.textContent=label;select.append(option);
   }
-  select.value=getSelection();if(!select.value){select.value='none';setSelection('none');}
+  const groups=new Map();for(const item of available){const path=normalizedPath(item.path),folder=path.includes('/')?path.slice(0,path.lastIndexOf('/')):'Individual videos';let group=groups.get(folder);if(!group){group=document.createElement('optgroup');group.label=folder;groups.set(folder,group);select.append(group);}group.append(new Option(path.split('/').pop(),item.id));}
+  select.value=getSelection();if(!select.value){select.value=available.length?'random':'none';setSelection(select.value);}
+  $('backgroundScope').textContent=`${available.length} video(s) in ${getFolder()==='all'?'all folders':getFolder()}. Random mode changes video each song; choosing a video keeps it for every song.`;
+  $('backgroundShuffle').disabled=!available.length;
  }
  function sync(playing=active,show=visible){
   active=playing;visible=show;video.hidden=!url||!visible;
@@ -24,7 +43,7 @@ export function setupBackgrounds({getSelection,setSelection,report}){
   else video.pause();
  }
  function select(){
-  const item=chooseBackground([...items.values()],getSelection(),previous);
+  const item=chooseBackground([...items.values()],getSelection(),previous,Math.random,getFolder());
   revision++;video.pause();video.removeAttribute('src');video.load();if(url)URL.revokeObjectURL(url);url=null;
   previous=item?.id||null;
   if(item){url=URL.createObjectURL(item.file);video.src=url;}
@@ -59,7 +78,8 @@ export function setupBackgrounds({getSelection,setSelection,report}){
   $('backgroundStatus').textContent='Folder selection is unavailable in this browser. Use Add videos, or try desktop Chrome or Edge.';
  };
  $('backgroundSelect').onchange=()=>{setSelection($('backgroundSelect').value);select();};
+ $('backgroundFolderSelect').onchange=()=>{setFolder($('backgroundFolderSelect').value);render();select();};
  $('backgroundShuffle').onclick=()=>{setSelection('random');render();select();};
- $('backgroundClear').onclick=async()=>{busy(true);await ready;try{await clearLocalFiles('backgrounds');items.clear();setSelection('none');render();select();$('backgroundStatus').textContent='Backgrounds cleared. Your original files are untouched.';}catch{$('backgroundStatus').textContent='Could not clear saved backgrounds. Please try again.';}finally{busy(false);}};
+ $('backgroundClear').onclick=async()=>{busy(true);await ready;try{await clearLocalFiles('backgrounds');items.clear();setSelection('none');setFolder('all');render();select();$('backgroundStatus').textContent='Backgrounds cleared. Your original files are untouched.';}catch{$('backgroundStatus').textContent='Could not clear saved backgrounds. Please try again.';}finally{busy(false);}};
  return {sync,nextSong:select,ready};
 }

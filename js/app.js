@@ -1,18 +1,18 @@
-import {loadingDeadline} from './loading.js?v=30';
-import {readMidi} from './midi-loader.js?v=30';
-import {lyricPresentation,lyricFill} from './lyrics.js?v=30';
-import {parseName,parseMidi,parseLRC} from './formats.js?v=30';
-import {SoundFontSynth} from './soundfont-synth.js?v=30';
-import {MAX_SOUNDFONT_BYTES,validateSoundFont,validateSoundFontHeader,downloadSoundFont} from './soundfonts.js?v=30';
+import {loadingDeadline} from './loading.js?v=31';
+import {readMidi} from './midi-loader.js?v=31';
+import {lyricPresentation,lyricFill} from './lyrics.js?v=31';
+import {parseName,parseMidi,parseLRC} from './formats.js?v=31';
+import {SoundFontSynth} from './soundfont-synth.js?v=31';
+import {MAX_SOUNDFONT_BYTES,validateSoundFont,validateSoundFontHeader,downloadSoundFont} from './soundfonts.js?v=31';
 import {CDGDecoder} from './cdg.js';
-import {SUPPORTED,MIDI,unpackZip,songFormat} from './library.js?v=30';
-import {libraryPage,searchText,createSongOrder} from './search.js?v=30';
-import {saveLocalFiles,loadLocalFiles,getLocalFile,clearLocalLibrary} from './storage.js?v=30';
-import {cachedSoundFont} from './font-cache.js?v=30';
-import {runImportBatches,importQueue} from './import-batch.js?v=30';
-import {songbookPage} from './catalog.js?v=30';
-import {setupBackgrounds} from './backgrounds.js?v=30';
-import {folderFiles,songFolderSelection} from './folder.js?v=30';
+import {SUPPORTED,MIDI,unpackZip,songFormat} from './library.js?v=31';
+import {libraryPage,searchText,createSongOrder} from './search.js?v=31';
+import {saveLocalFiles,loadLocalFiles,getLocalFile,clearLocalLibrary} from './storage.js?v=31';
+import {cachedSoundFont} from './font-cache.js?v=31';
+import {runImportBatches,importQueue} from './import-batch.js?v=31';
+import {songbookPage} from './catalog.js?v=31';
+import {setupBackgrounds} from './backgrounds.js?v=31';
+import {folderFiles,songFolderSelection} from './folder.js?v=31';
 let bookPage=0,bookLetter='all';
 let sessionEpoch=0,songAbort=null,leadIn=null;
 function songPhase(message,token){if(token===loadToken)$('stageStatus').textContent=message;}
@@ -29,14 +29,14 @@ const files=new Map(),songs=new Map();let queue=[],current=null,decoder=null,cur
 const songOrder=createSongOrder(()=>songs.values());
 const readJSON=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}};
 let favorites=new Set(readJSON('open-karaoke-favorites',[]));
-let preferences={lines:2,offset:0,melody:-1,auto:true,volume:65,textEncoding:'auto',soundfont:'karaoke-king',background:'none',...readJSON('open-karaoke-settings',{})};
+let preferences={lines:2,offset:0,melody:-1,auto:true,volume:65,textEncoding:'auto',soundfont:'karaoke-king',background:'none',backgroundFolder:'all',...readJSON('open-karaoke-settings',{})};
 const fonts=new Map();let fontBusy=false,fontPromise=null,fontAbort=null;
 let libraryIndex=0,searchTimer;
 const recentMidi=new Map();
 function updateMidiMetadata(song,midi){if(/^\d+$/.test(song.title)&&midi.metadata?.title)song.title=midi.metadata.title;if(song.artist==='Unknown artist'&&midi.metadata?.artist)song.artist=midi.metadata.artist;song.searchText=searchText(song);songOrder.invalidate();}
 function rememberMidi(song,midi){updateMidiMetadata(song,midi);song.midi=midi;song.midiEncoding=preferences.textEncoding;recentMidi.delete(song.id);recentMidi.set(song.id,song);while(recentMidi.size>3){const [id,oldest]=recentMidi.entries().next().value;delete oldest.midi;recentMidi.delete(id);}}
 function save(){try{localStorage.setItem('open-karaoke-favorites',JSON.stringify([...favorites]));localStorage.setItem('open-karaoke-settings',JSON.stringify(preferences));}catch{}}
-const backgrounds=setupBackgrounds({getSelection:()=>preferences.background,setSelection:value=>{preferences.background=value;save();},report:(count,issues)=>showImportReport(count,issues,'backgrounds')});
+const backgrounds=setupBackgrounds({getSelection:()=>preferences.background,setSelection:value=>{preferences.background=value;save();},getFolder:()=>preferences.backgroundFolder,setFolder:value=>{preferences.backgroundFolder=value;save();},report:(count,issues)=>showImportReport(count,issues,'backgrounds')});
 let toastTimer;function toast(message){$('toast').textContent=message;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,5200);}
 const node=(tag,cls,text)=>{const el=document.createElement(tag);if(cls)el.className=cls;if(text!==undefined)el.textContent=text;return el;};
 function button(label,title,action,cls=''){const b=node('button',cls,label);b.type='button';b.title=title;b.setAttribute('aria-label',title);b.onclick=action;return b;}
@@ -192,6 +192,13 @@ function updateControls(){const midi=current?.format==='MIDI',playing=midi?synth
 function changeKey(delta){key=Math.max(-12,Math.min(12,key+delta));synth.configure({key});updateControls();}
 function changeTempo(delta){rate=Math.round(Math.max(.5,Math.min(1.5,rate+delta))*100)/100;synth.configure({rate});media.playbackRate=rate;updateControls();}
 let lastLyricSignature='';
+function fitLyrics(){
+ const lyrics=$('lyrics');lyrics.style.setProperty('--lyric-scale',1);
+ const rows=[...lyrics.querySelectorAll('.karaoke-line')];if(!rows.length||!lyrics.clientWidth)return;
+ const widest=Math.max(...rows.map(row=>row.scrollWidth));
+ lyrics.style.setProperty('--lyric-scale',Math.min(1,(lyrics.clientWidth-12)/widest));
+}
+new ResizeObserver(fitLyrics).observe($('stage'));
 function renderLyrics(time){
   if(!current||(loading&&!leadIn)||decoder||current.format==='VIDEO')return;
   const adjusted=leadIn?Math.min(0,(performance.now()-leadIn.start)/1000-leadIn.seconds):time+preferences.offset;
@@ -211,6 +218,7 @@ function renderLyrics(time){
       }
       $('lyrics').append(row);
     }
+    fitLyrics();
   }
   view.rows.forEach((line,rowIndex)=>{
     const row=$('lyrics').children[rowIndex];if(!row)return;
@@ -279,7 +287,7 @@ function fontOptions(){
 }
 async function loadFontCatalog(){
   try{
-    const response=await fetch(new URL('../soundfonts.json?v=30',import.meta.url),{signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error('No included fonts');
+    const response=await fetch(new URL('../soundfonts.json?v=31',import.meta.url),{signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error('No included fonts');
     const catalog=await response.json();
     for(const font of catalog.fonts||[]){const url=new URL(font.url,new URL('../soundfonts.json',import.meta.url));if(typeof font.id==='string'&&typeof font.name==='string'&&Number.isSafeInteger(font.bytes)&&font.bytes>=12&&font.bytes<=MAX_SOUNDFONT_BYTES&&url.protocol==='https:')fonts.set(font.id,{...font,url:url.href});}
     if(fonts.has('karaoke-king')){
