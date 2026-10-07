@@ -90,3 +90,17 @@
 #stageBrowser .stage-browser-status{font-size:11px;color:#afe3ca;line-height:1.5;min-height:17px;flex-shrink:0}
 #stageBrowser .stage-browser-empty{padding:20px 8px;text-align:center;font-size:12px;color:#aaa0b9}
 @media(max-width:560px){#stageBrowser{inset:16px 16px auto;transform:none;width:calc(100vw - 32px);max-height:calc(100dvh - 32px);padding:16px;gap:12px}.stage-song-info{grid-template-columns:36px minmax(0,1fr);column-gap:6px}.stage-song-actions{gap:4px}.stage-song-play,.stage-song-add{padding:8px;font-size:11px}.stage-browser-heading h2{font-size:20px}}
+
+#backgroundCollectionName{min-width:0;width:60%;background:#1b1723;border:1px solid var(--line);border-radius:7px;padding:10px;color:var(--ink);font-size:13px}
+#stageBrowser{background:#181620;overscroll-behavior:contain}
+@media(max-height:540px) and (min-width:561px){
+ #stageBrowser{inset:8px 8px auto auto;width:min(480px,60vw);height:calc(100dvh - 16px);max-height:calc(100dvh - 16px);padding:12px;gap:8px}
+ .stage-browser-heading .eyebrow{display:none}
+ .stage-browser-heading h2{font-size:18px;margin-top:0}
+ #stageBrowser .stage-browser-search{min-height:38px}
+ .stage-song{padding:9px 2px}
+ .stage-browser-queue{padding:7px 10px}
+ #stageQueueList{max-height:70px}
+ #stageBrowser .stage-browser-status{font-size:10px}
+}
+@media(max-width:560px){#backgroundCollectionName{width:100%}#stageBrowser .stage-browser-search input{font-size:16px}#stageBrowser kbd{display:none}}

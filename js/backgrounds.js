@@ -1,5 +1,21 @@
-import {saveLocalFiles,loadLocalFiles,clearLocalFiles} from './storage.js?v=32';
-const normalizedPath=path=>String(path||'').replace(/\\/g,'/');
+import {saveLocalFiles,loadLocalFiles,clearLocalFiles} from './storage.js?v=33';
+export function backgroundPath(path){
+ path=String(path||'').replace(/\\/g,'/');
+ // Android's document picker can encode the actual relative path inside a
+ // Storage Access Framework document ID instead of returning normal folders.
+ if(/(?:^|\/)tree\//.test(path)&&path.includes('/document/')){
+  let document=path.slice(path.lastIndexOf('/document/')+10);
+  for(let i=0;i<2&&/%[\da-f]{2}/i.test(document);i++){try{document=decodeURIComponent(document);}catch{break;}}
+  document=document.replace(/^[^/]+:/,'').replace(/^\/+|\/+$/g,'');
+  if(document)path=document;
+ }
+ return path;
+}
+const normalizedPath=backgroundPath;
+export function backgroundImportPath(file,collection=''){
+ const path=backgroundPath(file.webkitRelativePath||file.name),name=String(collection).trim().replace(/[\\/]/g,'-');
+ return name?`${name}/${path.split('/').pop()}`:path;
+}
 export function folderBackgrounds(items,folder='all'){
  if(folder==='all')return items;
  const prefix=normalizedPath(folder).toLowerCase()+'/';
@@ -56,7 +72,7 @@ export function setupBackgrounds({getSelection,setSelection,getFolder=()=> 'all'
   busy(true);await ready;let count=0;const issues=[];
   try{
    for(const file of selected){
-    const path=file.webkitRelativePath||file.name;
+    const path=backgroundImportPath(file,$('backgroundCollectionName').value);
     if(!/\.(mp4|webm|m4v|mov)$/i.test(file.name)){issues.push({path,status:'Skipped',reason:'Choose MP4, WebM, M4V or MOV background videos.'});continue;}
     if(!file.size){issues.push({path,status:'Failed',reason:'This video is empty.'});continue;}
     const record={id:'background:'+path.toLowerCase(),path,file};items.set(record.id,record);count++;
