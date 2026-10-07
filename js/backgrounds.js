@@ -1,4 +1,4 @@
-import {saveLocalFiles,loadLocalFiles,clearLocalFiles} from './storage.js?v=31';
+import {saveLocalFiles,loadLocalFiles,clearLocalFiles} from './storage.js?v=32';
 const normalizedPath=path=>String(path||'').replace(/\\/g,'/');
 export function folderBackgrounds(items,folder='all'){
  if(folder==='all')return items;
