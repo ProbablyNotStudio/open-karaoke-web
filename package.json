@@ -1,0 +1,19 @@
+{
+  "name": "open-karaoke-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "start": "node tools/serve.js",
+    "vendor:soundfonts": "node tools/vendor-soundfonts.js"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.11",
+    "fflate": "0.8.3"
+  },
+  "dependencies": {
+    "spessasynth_core": "4.3.22",
+    "spessasynth_lib": "4.3.14"
+  }
+}

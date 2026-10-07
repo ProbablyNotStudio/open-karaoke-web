@@ -1,0 +1,12 @@
+{
+  "fonts": [
+    {
+      "name": "KaraOke King v2 (default)",
+      "url": "https://probablynotstudio.github.io/open-karaoke-web/soundfonts/KaraOke_King_v2.sf2",
+      "bytes": 98645536,
+      "id": "karaoke-king",
+      "source": "https://musical-artifacts.com/artifacts/9935",
+      "author": "SMARTCALWORX"
+    }
+  ]
+}
