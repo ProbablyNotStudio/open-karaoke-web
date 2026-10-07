@@ -21,6 +21,18 @@ test('syllables sweep progressively and final syllables finish before long break
  assert.equal(lyricFill(lines[0],1,15,40,50),1);
  assert.equal(lyricFill(lines[1],0,14.5,16,30),.5);
 });
+test('two rows alternate and replace each completed line with its continuation',()=>{
+ const sequence=[...lines,{time:20,text:'Four'},{time:24,text:'Five'}];
+ assert.deepEqual(lyricPresentation(sequence,10,30).rowIndices,[0,1]);
+ assert.deepEqual(lyricPresentation(sequence,12,30).rowIndices,[2,1]);
+ assert.deepEqual(lyricPresentation(sequence,13,30).rows.map(line=>line.text),['Three','Two']);
+ assert.deepEqual(lyricPresentation(sequence,16,30).rowIndices,[2,3]);
+ assert.deepEqual(lyricPresentation(sequence,20,30).rowIndices,[4,3]);
+ assert.deepEqual(lyricPresentation(sequence,11,30).rowIndices,[0,1]);
+ assert.deepEqual(lyricPresentation(sequence,16,30,4).rowIndices,[0,1,2,3]);
+ assert.deepEqual(lyricPresentation(sequence,29,30).rowIndices,[4,3]);
+ assert.deepEqual(lyricPresentation([lines[0]],10,15).rows,[lines[0],null]);
+});
 test('MIDI reader times out stuck files and cancels stale selections',async()=>{
  await assert.rejects(readMidi({arrayBuffer:()=>new Promise(()=>{})},{},{timeout:5}),/too long/);
  const controller=new AbortController();let terminated=0;
