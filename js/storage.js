@@ -27,7 +27,7 @@ export function createLibraryStorage({database=()=>globalThis.indexedDB,keyRange
   });
  }
  async function saveLocalFiles(store,records){if(records.length)await transaction(store,'readwrite',tx=>{for(const record of records)tx.objectStore(store).put(record);});}
- async function loadLocalFiles(store,{onProgress=()=>{},batchSize=store==='songs'?100:10,mapRecord=record=>record}={}){
+ async function loadLocalFiles(store,{onProgress=()=>{},batchSize=store==='songs'?50:1,mapRecord=record=>record}={}){
   const records=[];let after;
   do{
    const page=await transaction(store,'readonly',(tx,set,fail)=>{const request=tx.objectStore(store).getAll(after===undefined?null:keyRange().lowerBound(after,true),batchSize);request.onsuccess=()=>set(request.result);request.onerror=()=>fail(request.error);});

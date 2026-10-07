@@ -1,12 +1,14 @@
-// Keep a small descriptor in the library; read saved MIDI bytes only on demand.
-export function storedMidiFile(record,read){
- const {name,size,type,lastModified}=record.file,id=record.id;
- return {name,size,type,lastModified,async arrayBuffer(){
-  const saved=await read('songs',id);
+// Destructure immediately so the closure never retains the original Blob.
+export function storedFile({id,file:{name,size,type,lastModified}},read,store='songs'){
+ const blob=async()=>{
+  const saved=await read(store,id);
   if(!saved?.file)throw Error('Saved song is unavailable. Add this file again.');
-  return saved.file.arrayBuffer();
- }};
+  return saved.file;
+ };
+ return {name,size,type,lastModified,blob,async arrayBuffer(){return (await blob()).arrayBuffer();},async text(){return (await blob()).text();}};
 }
+export const storedMidiFile=storedFile;
+export const fileBlob=file=>typeof file.blob==='function'?file.blob():Promise.resolve(file);
 export async function fileDigest(file,buffer){
  const bytes=buffer||await file.arrayBuffer();
  const hash=await globalThis.crypto.subtle.digest('SHA-256',bytes);
