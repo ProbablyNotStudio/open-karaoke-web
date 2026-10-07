@@ -1,4 +1,9 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import {MidiSynth} from '../js/synth.js';
+test('a zero-duration MIDI finishes without leaving a repeating scheduler running',async()=>{
+ const synth=new MidiSynth();synth.context={currentTime:10};synth.init=async()=>{};let ended=0;synth.onended=()=>ended++;
+ synth.load({duration:0,notes:[]});await synth.play();
+ assert.equal(synth.playing,false);assert.equal(ended,1);assert.equal(synth.timer,undefined);
+});
 test('rapid seeking and tempo changes preserve pending playback',async()=>{
  const synth=new MidiSynth();let resume;const waiting=new Promise(resolve=>resume=resolve);synth.init=()=>waiting;
  synth.context={currentTime:10};synth.load({duration:10,notes:[]});const playing=synth.play();

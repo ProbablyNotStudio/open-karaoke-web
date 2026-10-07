@@ -1,4 +1,4 @@
-import {saveLocalFiles,loadLocalFiles,clearLocalFiles} from './storage.js?v=29';
+import {saveLocalFiles,loadLocalFiles,clearLocalFiles} from './storage.js?v=30';
 export function chooseBackground(items,selection,previous,random=Math.random){
  if(selection==='none')return null;
  if(selection!=='random')return items.find(item=>item.id===selection)||null;

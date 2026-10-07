@@ -37,7 +37,7 @@ export class MidiSynth {
   }
   load(song){this.stop();this.song=song;}
   get time(){return this.playing?Math.min(this.song.duration,this.position+(this.context.currentTime-this.anchor)*this.rate):this.position;}
-  async play(){if(!this.song)return;const generation=this.generation;this.playPending=true;try{await this.init();if(generation!==this.generation||this.playing)return;if(this.position>=this.song.duration)this.position=0;this.anchor=this.context.currentTime;this.playing=true;this.cursor=0;this.schedule();this.timer=setInterval(()=>this.schedule(),40);}finally{if(generation===this.generation)this.playPending=false;}}
+  async play(){if(!this.song)return;const generation=this.generation;this.playPending=true;try{await this.init();if(generation!==this.generation||this.playing)return;if(this.position>=this.song.duration)this.position=0;this.anchor=this.context.currentTime;this.playing=true;this.cursor=0;this.schedule();if(this.playing&&generation===this.generation)this.timer=setInterval(()=>this.schedule(),40);}finally{if(generation===this.generation)this.playPending=false;}}
   pause(){this.generation++;this.playPending=false;if(this.playing)this.position=this.time;this.playing=false;clearInterval(this.timer);this.silence();}
   stop(){this.pause();this.position=0;}
   seek(time){const running=this.playing||this.playPending;this.pause();this.position=Math.max(0,Math.min(this.song?.duration||0,time));if(running)void this.play();}
