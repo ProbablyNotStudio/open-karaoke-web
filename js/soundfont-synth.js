@@ -1,6 +1,6 @@
-import {MidiSynth} from './synth.js?v=43';
-import {validateSoundFont} from './soundfonts.js?v=43';
-import {loadingDeadline} from './loading.js?v=43';
+import {MidiSynth} from './synth.js?v=44';
+import {validateSoundFont} from './soundfonts.js?v=44';
+import {loadingDeadline} from './loading.js?v=44';
 
 const modules=new WeakMap();
 async function createEngine(context){

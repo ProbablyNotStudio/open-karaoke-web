@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {ENHANCED_TIMBRES,toneShape} from '../js/enhanced-timbres.js';
+import {ENHANCED_TIMBRES,toneShape,acousticEnvelope} from '../js/enhanced-timbres.js';
 import {MidiSynth} from '../js/synth.js';
 import {SoundFontSynth} from '../js/soundfont-synth.js';
 
@@ -78,4 +78,11 @@ test('enhanced selection needs no bank or sample engine and switching preserves 
  assert.equal(bankLoads,0);assert.equal(synth.profile,'builtin-enhanced');assert.equal(synth.playing,true);
  assert.equal(synth.position,3);assert.equal(synth.rate,1.2);assert.equal(synth.key,2);assert.equal(synth.mutedChannel,4);
  await synth.setSoundFont(null);assert.equal(synth.profile,'builtin');synth.stop();
+});
+
+test('sustained acoustic gain settles towards its instrument sustain without double-decaying plucks',()=>{
+ const shape=toneShape(56),long=acousticEnvelope(shape,3,true),short=acousticEnvelope(shape,.002,true);
+ assert.ok(long.heldLevel<1&&long.heldLevel>=shape.s);assert.ok(long.settleLevel>=long.heldLevel);
+ assert.ok(short.attack<=short.settle&&short.settle<=short.held);
+ assert.equal(acousticEnvelope(toneShape(24),3,false).heldLevel,1);
 });

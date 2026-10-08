@@ -1,5 +1,5 @@
-import {AcousticBank,textureSpec} from './acoustic-bank.js?v=43';
-import {toneShape} from './enhanced-timbres.js?v=43';
+import {AcousticBank,textureSpec} from './acoustic-bank.js?v=44';
+import {toneShape,acousticEnvelope} from './enhanced-timbres.js?v=44';
 // Original harmonic recipes in General MIDI family order. No sampled recordings.
 const TIMBRES=[
  {h:[1,.38,.2,.12,.07],a:.004,d:.65,s:.08,r:.18,g:1}, // piano
@@ -95,11 +95,14 @@ export class MidiSynth {
     pan.pan.value=Math.max(-1,Math.min(1,((n.pan??64)-64)/64));
     source.connect(filter);filter.connect(gain);gain.connect(pan);pan.connect(this.master);
     const drumLevel=[42,44,46].includes(n.pitch)?.32:[49,51,52,53,55,57,59].includes(n.pitch)?.5:[35,36].includes(n.pitch)?1.2:1;
-    const amp=Math.max(.0001,(n.velocity??100)/127*(n.volume??100)/127*(n.expression??127)/127*.2*(drum?drumLevel:t.g));
-    const held=drum?entry.seconds:Math.max(.002,duration),attack=drum?.001:Math.min(entry.loop?t.a:.003,held*.5),release=drum?.015:t.r;
+    const strength=Math.max(0,Math.min(1,(n.velocity??100)/127));
+    const amp=Math.max(.0001,strength**(drum?1.1:1.2)*(n.volume??100)/127*(n.expression??127)/127*.2*(drum?drumLevel:t.g));
+    const envelope=acousticEnvelope(t,duration,entry.loop);
+    const held=drum?entry.seconds:envelope.held,attack=drum?.001:envelope.attack,release=drum?.015:envelope.release;
     const stopAt=start+held+release;
     gain.gain.setValueAtTime(.0001,start);gain.gain.exponentialRampToValueAtTime(amp,start+attack);
-    gain.gain.setValueAtTime(amp,start+held);gain.gain.exponentialRampToValueAtTime(.0001,stopAt);
+    if(!drum){gain.gain.exponentialRampToValueAtTime(Math.max(.0001,amp*envelope.settleLevel),start+envelope.settle);gain.gain.exponentialRampToValueAtTime(Math.max(.0001,amp*envelope.heldLevel),start+held);}
+    else gain.gain.setValueAtTime(amp,start+held);gain.gain.exponentialRampToValueAtTime(.0001,stopAt);
     let cleaned=false;const cleanup=()=>{if(cleaned)return;cleaned=true;this.voices.delete(voice);for(const node of [source,filter,gain,pan])node.disconnect();};
     const voice={drumPitch:drum?n.pitch:null,start,choke:time=>{gain.gain.cancelScheduledValues(time);gain.gain.setTargetAtTime(.0001,time,.005);source.stop(time+.03);},stop:()=>{try{source.stop();}catch{}cleanup();}};this.voices.add(voice);
     source.onended=cleanup;source.start(start);source.stop(stopAt+.01);

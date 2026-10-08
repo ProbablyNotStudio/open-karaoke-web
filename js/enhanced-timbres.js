@@ -51,3 +51,12 @@ export function toneShape(program,velocity=100,pitch=60,sampleRate=44100){
  const cutoff=Math.min(ceiling,Math.max(180,(frequency*10+900)*t.brightness*(.45+strength*.9)));
  return {...t,cutoff,attackCutoff:Math.min(ceiling,cutoff*1.6),level:strength**1.35*t.g};
 }
+
+// Sustained PCM carries its tone, while gain supplies attack, settling and
+// release. Nonlooping piano/guitar textures already contain natural decay.
+export function acousticEnvelope(shape,duration,loop=false){
+ const held=Math.max(.002,duration),attack=Math.min(loop?shape.a:.003,held*.5);
+ const decay=Math.max(.001,shape.d),settle=Math.min(held,attack+decay);
+ const level=time=>loop?Math.max(.001,shape.s+(1-shape.s)*Math.exp(-Math.max(0,time-attack)/decay)):1;
+ return {held,attack,settle,settleLevel:level(settle),heldLevel:level(held),release:shape.r};
+}
