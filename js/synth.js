@@ -1,4 +1,5 @@
-import {ENHANCED_TIMBRES,toneShape} from './enhanced-timbres.js?v=38';
+import {AcousticBank,textureSpec} from './acoustic-bank.js?v=39';
+import {toneShape} from './enhanced-timbres.js?v=39';
 // Original harmonic recipes in General MIDI family order. No sampled recordings.
 const TIMBRES=[
  {h:[1,.38,.2,.12,.07],a:.004,d:.65,s:.08,r:.18,g:1}, // piano
@@ -37,7 +38,6 @@ export class MidiSynth {
       this.noise=this.context.createBuffer(1,this.context.sampleRate,this.context.sampleRate);
       const d=this.noise.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
     }
-    if(this.profile==='builtin-enhanced'&&!this.enhancedWaves)this.enhancedWaves=ENHANCED_TIMBRES.map(t=>this.context.createPeriodicWave(new Float32Array(t.h.length+1),new Float32Array([0,...t.h])));
     await this.context.resume();
   }
   setProfile(id){this.profile=id==='builtin-enhanced'?'builtin-enhanced':'builtin';this.configureOutput();}
@@ -53,7 +53,7 @@ export class MidiSynth {
   }
   load(song){this.stop();this.song=song;}
   get time(){return this.playing?Math.min(this.song.duration,this.position+(this.context.currentTime-this.anchor)*this.rate):this.position;}
-  async play(){if(!this.song)return;const generation=this.generation;this.playPending=true;try{await this.init();if(generation!==this.generation||this.playing)return;if(this.position>=this.song.duration)this.position=0;this.anchor=this.context.currentTime;this.playing=true;this.cursor=0;this.schedule();if(this.playing&&generation===this.generation)this.timer=setInterval(()=>this.schedule(),40);}finally{if(generation===this.generation)this.playPending=false;}}
+  async play(){if(!this.song)return;const generation=this.generation;this.playPending=true;try{await this.init();if(generation!==this.generation||this.playing)return;if(this.profile==='builtin-enhanced')await this.prepareAcoustic(generation);if(generation!==this.generation||this.playing)return;if(this.position>=this.song.duration)this.position=0;this.anchor=this.context.currentTime;this.playing=true;this.cursor=0;this.schedule();if(this.playing&&generation===this.generation)this.timer=setInterval(()=>this.schedule(),40);}finally{if(generation===this.generation)this.playPending=false;}}
   pause(){this.generation++;this.playPending=false;if(this.playing)this.position=this.time;this.playing=false;clearInterval(this.timer);this.silence();}
   stop(){this.pause();this.position=0;}
   seek(time){const running=this.playing||this.playPending;this.pause();this.position=Math.max(0,Math.min(this.song?.duration||0,time));if(running)void this.play();}
@@ -70,22 +70,53 @@ export class MidiSynth {
     }
     if(now>=this.song.duration){this.pause();this.position=this.song.duration;this.onended?.();}
   }
+  acousticSpec(n){return textureSpec(n.program??0,n.pitch+(n.ch===9?0:this.key+(n.bend??0)),n.velocity??100,n.ch===9);}
+  async prepareAcoustic(generation){
+    if(!this.bank)this.bank=new AcousticBank(this.context);
+    let count=0;const seen=new Set();
+    for(const n of this.song.notes){
+      if(n.time>this.position+2)break;
+      if(n.end<=this.position||n.ch===this.mutedChannel)continue;
+      const spec=this.acousticSpec(n);if(seen.has(spec.key))continue;seen.add(spec.key);this.bank.get(spec);
+      if(++count%2===0)await new Promise(resolve=>setTimeout(resolve,0));
+      if(generation!==this.generation||this.profile!=='builtin-enhanced'||count>=24)return;
+    }
+  }
+  acousticVoice(n,start,duration){
+    const ctx=this.context;if(!this.bank)this.bank=new AcousticBank(ctx);
+    if(n.ch===9&&[42,44].includes(n.pitch))for(const voice of this.voices)if(voice.drumPitch===46&&voice.start<=start)voice.choke(start);
+    const spec=this.acousticSpec(n),entry=this.bank.get(spec),source=ctx.createBufferSource(),gain=ctx.createGain(),pan=ctx.createStereoPanner(),filter=ctx.createBiquadFilter();
+    const drum=n.ch===9,t=toneShape(n.program??0,n.velocity??100,n.pitch+this.key+(n.bend??0),ctx.sampleRate);
+    const pitch=440*2**((n.pitch+this.key+(n.bend??0)-69)/12);
+    source.buffer=entry.buffer;source.loop=entry.loop;source.playbackRate.value=drum?1:pitch/entry.frequency;
+    filter.type='lowpass';filter.Q.value=.45;
+    filter.frequency.setValueAtTime(drum?ctx.sampleRate*.44:t.attackCutoff,start);
+    if(!drum)filter.frequency.exponentialRampToValueAtTime(t.cutoff,start+Math.min(duration,.2));
+    pan.pan.value=Math.max(-1,Math.min(1,((n.pan??64)-64)/64));
+    source.connect(filter);filter.connect(gain);gain.connect(pan);pan.connect(this.master);
+    const drumLevel=[42,44,46].includes(n.pitch)?.32:[49,51,52,53,55,57,59].includes(n.pitch)?.5:[35,36].includes(n.pitch)?1.2:1;
+    const amp=Math.max(.0001,(n.velocity??100)/127*(n.volume??100)/127*(n.expression??127)/127*.2*(drum?drumLevel:t.g));
+    const held=drum?entry.seconds:Math.max(.002,duration),attack=drum?.001:Math.min(entry.loop?t.a:.003,held*.5),release=drum?.015:t.r;
+    const stopAt=start+held+release;
+    gain.gain.setValueAtTime(.0001,start);gain.gain.exponentialRampToValueAtTime(amp,start+attack);
+    gain.gain.setValueAtTime(amp,start+held);gain.gain.exponentialRampToValueAtTime(.0001,stopAt);
+    let cleaned=false;const cleanup=()=>{if(cleaned)return;cleaned=true;this.voices.delete(voice);for(const node of [source,filter,gain,pan])node.disconnect();};
+    const voice={drumPitch:drum?n.pitch:null,start,choke:time=>{gain.gain.cancelScheduledValues(time);gain.gain.setTargetAtTime(.0001,time,.005);source.stop(time+.03);},stop:()=>{try{source.stop();}catch{}cleanup();}};this.voices.add(voice);
+    source.onended=cleanup;source.start(start);source.stop(stopAt+.01);
+  }
   voice(n,start,duration){
     if(this.voices.size>=96)return;
+    if(this.profile==='builtin-enhanced')return this.acousticVoice(n,start,duration);
     const ctx=this.context,gain=ctx.createGain(),pan=ctx.createStereoPanner(),sources=[],nodes=[gain,pan];
     pan.pan.value=Math.max(-1,Math.min(1,((n.pan??64)-64)/64));gain.connect(pan);pan.connect(this.master);
     const amp=Math.max(.0001,(n.velocity??100)/127*(n.volume??100)/127*(n.expression??127)/127*.14);
     const connect=(source,filter)=>{sources.push(source);if(filter){nodes.push(filter);source.connect(filter);filter.connect(gain);}else source.connect(gain);return source;};
     let attack=.003,decay=.1,sustain=.01,release=.05,level=amp,stopAt;
-    const enhanced=this.profile==='builtin-enhanced';
     if(n.ch===9){
       const k=n.pitch;
       // Drum envelopes ring independently of short MIDI note-off events.
       duration=k===46?.32:[49,51,52,55,57,59].includes(k)?.75:k===42||k===44?.06:.18;
-      if(enhanced&&[56,67,68,75,76,77,80,81].includes(k)){
-        const osc=connect(ctx.createOscillator());osc.type='sine';osc.frequency.value=({56:540,67:900,68:1200,75:850,76:1100,77:820,80:1600,81:1900})[k];
-        duration=k>=80?.35:.12;level*=.55;
-      }else if(k===35||k===36||[41,43,45,47,48,50,60,61,62,63,64].includes(k)){
+      if(k===35||k===36||[41,43,45,47,48,50,60,61,62,63,64].includes(k)){
         const osc=connect(ctx.createOscillator());const kick=k<=36;
         osc.frequency.setValueAtTime(kick?145:90*2**((k-41)/15),start);osc.frequency.exponentialRampToValueAtTime(kick?45:70*2**((k-41)/15),start+.1);
         duration=kick?.25:.22;level*=1.35;
@@ -100,22 +131,11 @@ export class MidiSynth {
       decay=duration;sustain=.001;stopAt=start+duration+release;
     }else{
       const program=Math.max(0,Math.min(127,Math.trunc(n.program??0))),family=program>>3;
-      const t=enhanced?toneShape(program,n.velocity??100,n.pitch+this.key+(n.bend??0),ctx.sampleRate):TIMBRES[family];
+      const t=TIMBRES[family];
       attack=t.a;decay=t.d;sustain=t.s;release=t.r;level*=t.g;
       const frequency=440*2**((n.pitch+this.key+(n.bend??0)-69)/12),osc=ctx.createOscillator(),filter=ctx.createBiquadFilter();
-      osc.setPeriodicWave(enhanced?this.enhancedWaves[program]:this.waves[family]);osc.frequency.value=frequency;
+      osc.setPeriodicWave(this.waves[family]);osc.frequency.value=frequency;
       filter.type='lowpass';filter.frequency.value=Math.min(ctx.sampleRate*.45,frequency*(family===4?6:18)+1200);filter.Q.value=.5;connect(osc,filter);
-      if(enhanced){
-        level*=Math.max(.1,((n.velocity??100)/127)**.35);
-        filter.frequency.setValueAtTime(t.attackCutoff,start);
-        filter.frequency.exponentialRampToValueAtTime(t.cutoff,start+Math.min(duration,.18));
-        // Layer only the first 24 sustained voices; dense arrangements keep
-        // their notes while limiting extra oscillators on mobile devices.
-        if(t.spread&&this.voices.size<24){
-          const layer=ctx.createOscillator();layer.setPeriodicWave(this.enhancedWaves[program]);layer.frequency.value=frequency;
-          osc.detune.value=-t.spread;layer.detune.value=t.spread;layer.connect(filter);sources.push(layer);level*=.6;
-        }
-      }
       stopAt=start+duration+release;
     }
     // A note-off during the attack must never create out-of-order automation.

@@ -1,20 +1,20 @@
-import {loadingDeadline} from './loading.js?v=38';
-import {readMidi} from './midi-loader.js?v=38';
-import {lyricPresentation,lyricFill} from './lyrics.js?v=38';
-import {parseName,parseMidi,parseLRC} from './formats.js?v=38';
-import {SoundFontSynth} from './soundfont-synth.js?v=38';
-import {MAX_SOUNDFONT_BYTES,validateSoundFont,validateSoundFontHeader,downloadSoundFont} from './soundfonts.js?v=38';
+import {loadingDeadline} from './loading.js?v=39';
+import {readMidi} from './midi-loader.js?v=39';
+import {lyricPresentation,lyricFill} from './lyrics.js?v=39';
+import {parseName,parseMidi,parseLRC} from './formats.js?v=39';
+import {SoundFontSynth} from './soundfont-synth.js?v=39';
+import {MAX_SOUNDFONT_BYTES,validateSoundFont,validateSoundFontHeader,downloadSoundFont} from './soundfonts.js?v=39';
 import {CDGDecoder} from './cdg.js';
-import {SUPPORTED,MIDI,unpackZip,songFormat} from './library.js?v=38';
-import {libraryPage,searchText,createSongOrder} from './search.js?v=38';
-import {saveLocalFiles,loadLocalFiles,getLocalFile,clearLocalFiles} from './storage.js?v=38';
-import {cachedSoundFont} from './font-cache.js?v=38';
-import {runImportBatches,importQueue} from './import-batch.js?v=38';
-import {songbookPage} from './catalog.js?v=38';
-import {setupBackgrounds} from './backgrounds.js?v=38';
-import {folderFiles,songFolderSelection} from './folder.js?v=38';
-import {storedFile,fileBlob,fileDigest} from './import-memory.js?v=38';
-import {defaultSoundFont,setupMobileViewport} from './device.js?v=38';
+import {SUPPORTED,MIDI,unpackZip,songFormat} from './library.js?v=39';
+import {libraryPage,searchText,createSongOrder} from './search.js?v=39';
+import {saveLocalFiles,loadLocalFiles,getLocalFile,clearLocalFiles} from './storage.js?v=39';
+import {cachedSoundFont} from './font-cache.js?v=39';
+import {runImportBatches,importQueue} from './import-batch.js?v=39';
+import {songbookPage} from './catalog.js?v=39';
+import {setupBackgrounds} from './backgrounds.js?v=39';
+import {folderFiles,songFolderSelection} from './folder.js?v=39';
+import {storedFile,fileBlob,fileDigest} from './import-memory.js?v=39';
+import {defaultSoundFont,setupMobileViewport} from './device.js?v=39';
 setupMobileViewport(document.getElementById('stageBrowser'));
 let bookPage=0,bookLetter='all';
 let sessionEpoch=0,songAbort=null,leadIn=null;
@@ -354,7 +354,7 @@ function fontOptions(){
 async function loadFontCatalog(){
   fontOptions();if(['builtin','builtin-enhanced'].includes(preferences.soundfont))$('soundFont').value=preferences.soundfont;
   try{
-    const response=await fetch(new URL('../soundfonts.json?v=38',import.meta.url),{signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error('No included fonts');
+    const response=await fetch(new URL('../soundfonts.json?v=39',import.meta.url),{signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error('No included fonts');
     const catalog=await response.json();
     for(const font of catalog.fonts||[]){const url=new URL(font.url,new URL('../soundfonts.json',import.meta.url));if(typeof font.id==='string'&&typeof font.name==='string'&&Number.isSafeInteger(font.bytes)&&font.bytes>=12&&font.bytes<=MAX_SOUNDFONT_BYTES&&url.protocol==='https:')fonts.set(font.id,{...font,url:url.href});}
     if(fonts.has('karaoke-king')){

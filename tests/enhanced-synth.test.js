@@ -30,24 +30,23 @@ test('all 128 enhanced programs have bounded envelopes and velocity-sensitive br
 
 function audio(){
  const events=[],sources=[],nodes=[];
- const param=()=>{let last=-Infinity;const record=(v,t)=>{assert.ok(t>=last);last=t;events.push([v,t]);};return {value:0,setValueAtTime:record,exponentialRampToValueAtTime:record};};
+ const param=()=>{let last=-Infinity;const record=(v,t)=>{assert.ok(t>=last);last=t;events.push([v,t]);};return {value:0,setValueAtTime:record,exponentialRampToValueAtTime:record,cancelScheduledValues(){last=-Infinity;},setTargetAtTime:record};};
  const node=()=>{const n={disconnected:false,connect(){},disconnect(){this.disconnected=true;}};nodes.push(n);return n;};
- const source=()=>{const s=Object.assign(node(),{frequency:param(),detune:param(),setPeriodicWave(){},start(){},stop(){}});sources.push(s);return s;};
- return {events,sources,nodes,context:{sampleRate:22050,createGain:()=>Object.assign(node(),{gain:param()}),createStereoPanner:()=>Object.assign(node(),{pan:param()}),createOscillator:source,createBufferSource:source,createBiquadFilter:()=>Object.assign(node(),{frequency:param(),Q:param()})}};
+ const source=()=>{const s=Object.assign(node(),{frequency:param(),playbackRate:param(),detune:param(),setPeriodicWave(){},start(){},stop(){}});sources.push(s);return s;};
+ return {events,sources,nodes,context:{sampleRate:22050,createBuffer:(_,length)=>{const data=new Float32Array(length);return {getChannelData:()=>data};},createGain:()=>Object.assign(node(),{gain:param()}),createStereoPanner:()=>Object.assign(node(),{pan:param()}),createOscillator:source,createBufferSource:source,createBiquadFilter:()=>Object.assign(node(),{frequency:param(),Q:param()})}};
 }
-test('short enhanced notes have ordered automation; layered voices release every node',()=>{
+test('short acoustic notes have ordered automation and release every node',()=>{
  const a=audio(),synth=new MidiSynth();synth.context=a.context;synth.master={};synth.enhancedWaves=Array(128).fill({});synth.setProfile('builtin-enhanced');
  synth.voice({ch:0,pitch:60,program:48,velocity:100},10,.002);
- assert.equal(a.sources.length,2);assert.equal(synth.voices.size,1);
+ assert.equal(a.sources.length,1);assert.equal(synth.voices.size,1);
  // Each AudioParam receives nondecreasing times even for a tiny note.
  assert.ok(a.events.every(([v,t])=>Number.isFinite(v)&&v>0&&t>=10));
- a.sources[0].onended();assert.equal(synth.voices.size,1);
- a.sources[1].onended();assert.equal(synth.voices.size,0);assert.ok(a.nodes.every(n=>n.disconnected));
+ a.sources[0].onended();assert.equal(synth.voices.size,0);assert.ok(a.nodes.every(n=>n.disconnected));
 });
-test('dense enhanced arrangements stop adding chorus layers and Stop disconnects voices',()=>{
+test('dense acoustic arrangements use one source per note and Stop disconnects voices',()=>{
  const a=audio(),synth=new MidiSynth();synth.context=a.context;synth.master={};synth.enhancedWaves=Array(128).fill({});synth.setProfile('builtin-enhanced');
  for(let i=0;i<40;i++)synth.voice({ch:0,pitch:60,program:48},10,1);
- assert.equal(synth.voices.size,40);assert.equal(a.sources.length,64);
+ assert.equal(synth.voices.size,40);assert.equal(a.sources.length,40);
  synth.silence();assert.equal(synth.voices.size,0);assert.ok(a.nodes.every(n=>n.disconnected));
 });
 test('enhanced percussion accepts the GM drum range and ignores tiny note-off lengths',()=>{
@@ -56,6 +55,19 @@ test('enhanced percussion accepts the GM drum range and ignores tiny note-off le
  assert.equal(synth.voices.size,47);
  assert.ok(a.events.every(([value,time])=>Number.isFinite(value)&&value>0&&time>=10));
  synth.silence();assert.ok(a.nodes.every(node=>node.disconnected));
+});
+test('closed hi-hat chokes an open hi-hat at the scheduled hit time',()=>{
+ const a=audio(),synth=new MidiSynth();synth.context=a.context;synth.master={};synth.setProfile('builtin-enhanced');
+ synth.voice({ch:9,pitch:46},10,.02);let stopAt;
+ a.sources[0].stop=time=>{stopAt=time;};
+ synth.voice({ch:9,pitch:42},10.15,.02);
+ assert.equal(stopAt,10.18);assert.equal(synth.voices.size,2);synth.silence();
+});
+test('Stop cancels acoustic preparation before it starts playback',async()=>{
+ const a=audio(),synth=new MidiSynth();synth.context={...a.context,currentTime:10};synth.master={};synth.init=async()=>{};
+ synth.setProfile('builtin-enhanced');synth.load({duration:10,notes:[{ch:0,program:0,pitch:60,time:0,end:1},{ch:0,program:24,pitch:64,time:0,end:1}]});
+ const pending=synth.play();await Promise.resolve();synth.stop();await pending;
+ assert.equal(synth.playing,false);assert.equal(synth.voices.size,0);assert.equal(synth.timer,undefined);
 });
 test('enhanced selection needs no bank or sample engine and switching preserves controls',async()=>{
  let bankLoads=0;
