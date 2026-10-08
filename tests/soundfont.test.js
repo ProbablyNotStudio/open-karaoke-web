@@ -27,6 +27,13 @@ function mockEngine({delayed=false,invalid=false}={}){
  engine.seq={eventHandler:events,currentHighResolutionTime:3,currentTime:0,plays:0,pause(){},play(){this.plays++;},loadNewSongList(){if(!delayed)queueMicrotask(()=>events.fire('songChange'));}};return engine;
 }
 const readyPlayer=engine=>{const player=new SoundFontSynth(async()=>engine);player.context={currentTime:10,resume:async()=>{}};player.master={};return player;};
+test('switching from a sampled bank to enhanced synth destroys the bank and resumes at the same position',async()=>{
+ const engine=mockEngine(),player=readyPlayer(engine);player.context.createPeriodicWave=()=>({});
+ await player.setSoundFont(font(),{id:'sampled'});player.load({duration:10,buffer:font(),notes:[]});await player.play();
+ await player.setSoundFont(null,{id:'builtin-enhanced',name:'Enhanced synth'});
+ assert.equal(engine.destroyed,true);assert.equal(player.engine,null);assert.equal(player.profile,'builtin-enhanced');
+ assert.equal(player.position,3);assert.equal(player.playing,true);player.stop();
+});
 test('SoundFont switch preserves playback position, transpose, tempo and melody mute',async()=>{
  const engine=mockEngine(),player=readyPlayer(engine);player.load({duration:10,notes:[],buffer:font()});player.position=3;player.rate=1.1;player.key=2;player.mutedChannel=4;await player.play();
  await player.setSoundFont(font(),{id:'sampled',name:'Sampled'});

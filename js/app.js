@@ -1,20 +1,20 @@
-import {loadingDeadline} from './loading.js?v=37';
-import {readMidi} from './midi-loader.js?v=37';
-import {lyricPresentation,lyricFill} from './lyrics.js?v=37';
-import {parseName,parseMidi,parseLRC} from './formats.js?v=37';
-import {SoundFontSynth} from './soundfont-synth.js?v=37';
-import {MAX_SOUNDFONT_BYTES,validateSoundFont,validateSoundFontHeader,downloadSoundFont} from './soundfonts.js?v=37';
+import {loadingDeadline} from './loading.js?v=38';
+import {readMidi} from './midi-loader.js?v=38';
+import {lyricPresentation,lyricFill} from './lyrics.js?v=38';
+import {parseName,parseMidi,parseLRC} from './formats.js?v=38';
+import {SoundFontSynth} from './soundfont-synth.js?v=38';
+import {MAX_SOUNDFONT_BYTES,validateSoundFont,validateSoundFontHeader,downloadSoundFont} from './soundfonts.js?v=38';
 import {CDGDecoder} from './cdg.js';
-import {SUPPORTED,MIDI,unpackZip,songFormat} from './library.js?v=37';
-import {libraryPage,searchText,createSongOrder} from './search.js?v=37';
-import {saveLocalFiles,loadLocalFiles,getLocalFile,clearLocalFiles} from './storage.js?v=37';
-import {cachedSoundFont} from './font-cache.js?v=37';
-import {runImportBatches,importQueue} from './import-batch.js?v=37';
-import {songbookPage} from './catalog.js?v=37';
-import {setupBackgrounds} from './backgrounds.js?v=37';
-import {folderFiles,songFolderSelection} from './folder.js?v=37';
-import {storedFile,fileBlob,fileDigest} from './import-memory.js?v=37';
-import {defaultSoundFont,setupMobileViewport} from './device.js?v=37';
+import {SUPPORTED,MIDI,unpackZip,songFormat} from './library.js?v=38';
+import {libraryPage,searchText,createSongOrder} from './search.js?v=38';
+import {saveLocalFiles,loadLocalFiles,getLocalFile,clearLocalFiles} from './storage.js?v=38';
+import {cachedSoundFont} from './font-cache.js?v=38';
+import {runImportBatches,importQueue} from './import-batch.js?v=38';
+import {songbookPage} from './catalog.js?v=38';
+import {setupBackgrounds} from './backgrounds.js?v=38';
+import {folderFiles,songFolderSelection} from './folder.js?v=38';
+import {storedFile,fileBlob,fileDigest} from './import-memory.js?v=38';
+import {defaultSoundFont,setupMobileViewport} from './device.js?v=38';
 setupMobileViewport(document.getElementById('stageBrowser'));
 let bookPage=0,bookLetter='all';
 let sessionEpoch=0,songAbort=null,leadIn=null;
@@ -33,6 +33,9 @@ const songOrder=createSongOrder(()=>songs.values());
 const readJSON=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}};
 let favorites=new Set(readJSON('open-karaoke-favorites',[]));
 let preferences={lines:2,offset:0,melody:-1,auto:true,volume:65,textEncoding:'auto',soundfont:defaultSoundFont(),background:'none',backgroundFolder:'all',...readJSON('open-karaoke-settings',{})};
+// Restore generated instruments immediately, even while a large saved song
+// library is still loading or the included-font catalog is unavailable.
+if(['builtin','builtin-enhanced'].includes(preferences.soundfont))$('soundFont').value=preferences.soundfont;
 const fonts=new Map();let fontBusy=false,fontPromise=null,fontAbort=null;
 let libraryIndex=0,searchTimer;
 let stagePage=0,stageSearchTimer;
@@ -337,17 +340,18 @@ window.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('stageBrow
 $('fullscreen').onclick=fullscreen;
 $('settingsOpen').onclick=()=>$('settings').showModal();for(const id of ['helpOpen','formatsHelp'])$(id).onclick=()=>$('help').showModal();$('helpClose').onclick=()=>$('help').close();
 function fontOptions(){
-  const selected=$('soundFont').value;$('soundFont').replaceChildren(new Option('Built-in synth (no download)','builtin'));
+  const selected=$('soundFont').value;$('soundFont').replaceChildren(new Option('Built-in synth (no download)','builtin'),new Option('Enhanced synth (no download)','builtin-enhanced'));
   for(const [local,label] of [[false,'Included SoundFonts'],[true,'Your SoundFonts']]){
     const group=document.createElement('optgroup');group.label=label;
     for(const [id,font] of fonts)if(Boolean(font.file)===local)group.append(new Option(`${font.name} (${(font.bytes/1024/1024).toFixed(1)} MB)`,id));
     if(group.children.length)$('soundFont').append(group);
   }
-  $('soundFont').value=fonts.has(selected)||selected==='builtin'?selected:'builtin';
+  $('soundFont').value=fonts.has(selected)||['builtin','builtin-enhanced'].includes(selected)?selected:'builtin';
 }
 async function loadFontCatalog(){
+  fontOptions();if(['builtin','builtin-enhanced'].includes(preferences.soundfont))$('soundFont').value=preferences.soundfont;
   try{
-    const response=await fetch(new URL('../soundfonts.json?v=37',import.meta.url),{signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error('No included fonts');
+    const response=await fetch(new URL('../soundfonts.json?v=38',import.meta.url),{signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error('No included fonts');
     const catalog=await response.json();
     for(const font of catalog.fonts||[]){const url=new URL(font.url,new URL('../soundfonts.json',import.meta.url));if(typeof font.id==='string'&&typeof font.name==='string'&&Number.isSafeInteger(font.bytes)&&font.bytes>=12&&font.bytes<=MAX_SOUNDFONT_BYTES&&url.protocol==='https:')fonts.set(font.id,{...font,url:url.href});}
     if(fonts.has('karaoke-king')){
@@ -356,7 +360,8 @@ async function loadFontCatalog(){
     }
     fontOptions();
     if(fonts.has(preferences.soundfont)){$('soundFont').value=preferences.soundfont;$('fontStatus').textContent=`${fonts.get(preferences.soundfont).name} selected. Loads when you play MIDI.`;}
-    else if(preferences.soundfont!=='builtin'){$('fontStatus').textContent='Add your personal SoundFont again to use it this session.';preferences.soundfont='builtin';save();}
+    else if(['builtin','builtin-enhanced'].includes(preferences.soundfont)){$('soundFont').value=preferences.soundfont;$('fontStatus').textContent='Selected synth is ready. No SoundFont download needed.';}
+    else{$('fontStatus').textContent='Add your personal SoundFont again to use it this session.';preferences.soundfont='builtin';save();}
   }catch{$('fontStatus').textContent='Included fonts could not load. You can still add your own SoundFont.';}
 }
 function ensureSoundFont(){
@@ -377,7 +382,7 @@ function ensureSoundFont(){
         });
         $('fontStatus').textContent=`Preparing ${font.name} instruments…`;if(loading)$('stageStatus').textContent=$('fontStatus').textContent;$('fontCancel').disabled=true;
       }
-      await synth.setSoundFont(buffer,{id,name:font?.name||'Built-in synth'});
+      await synth.setSoundFont(buffer,{id,name:font?.name||(id==='builtin-enhanced'?'Enhanced synth':'Built-in synth')});
       preferences.soundfont=id;save();$('fontStatus').textContent=`Using ${synth.fontName}.${reusedFont?' Reused the saved download.':''}`;
       if(current?.format==='MIDI')$('formatTag').textContent='MIDI · '+synth.fontName;
     }catch(error){

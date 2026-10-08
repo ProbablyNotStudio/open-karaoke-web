@@ -1,6 +1,6 @@
-import {MidiSynth} from './synth.js?v=37';
-import {validateSoundFont} from './soundfonts.js?v=37';
-import {loadingDeadline} from './loading.js?v=37';
+import {MidiSynth} from './synth.js?v=38';
+import {validateSoundFont} from './soundfonts.js?v=38';
+import {loadingDeadline} from './loading.js?v=38';
 
 const modules=new WeakMap();
 async function createEngine(context){
@@ -40,7 +40,7 @@ export class SoundFontSynth extends MidiSynth {
     }
     const running=this.playing||this.playPending,position=this.time,previous=this.engine;
     this.pause();this.engine=candidate;this.engineSong=null;this.loadChain=Promise.resolve();this.position=position;this.fontID=id;this.fontName=name;
-    previous?.destroy();
+    previous?.destroy();this.setProfile(id);
     if(candidate){candidate.synth.connect(this.master);candidate.seq.eventHandler.addEvent('songEnded','karaoke',()=>{if(this.engine!==candidate||!this.playing)return;this.playing=false;this.position=this.song?.duration||0;this.onended?.();});this.applyFontControls();}
     if(running&&this.song)await this.play();
   }

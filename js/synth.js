@@ -1,3 +1,4 @@
+import {ENHANCED_TIMBRES,toneShape} from './enhanced-timbres.js?v=38';
 // Original harmonic recipes in General MIDI family order. No sampled recordings.
 const TIMBRES=[
  {h:[1,.38,.2,.12,.07],a:.004,d:.65,s:.08,r:.18,g:1}, // piano
@@ -18,12 +19,15 @@ const TIMBRES=[
  {h:[1,.4,.18,.09],a:.008,d:.25,s:.12,r:.12,g:.7} // effects
 ];
 export class MidiSynth {
-  constructor(){this.context=null;this.voices=new Set();this.position=0;this.rate=1;this.key=0;this.volume=.65;this.playing=false;this.song=null;this.mutedChannel=-1;this.generation=0;}
+  constructor(){this.profile='builtin';this.context=null;this.voices=new Set();this.position=0;this.rate=1;this.key=0;this.volume=.65;this.playing=false;this.song=null;this.mutedChannel=-1;this.generation=0;}
   async init(){
     if(!this.context){
       this.context=new AudioContext();this.master=this.context.createGain();
-      const compressor=this.context.createDynamicsCompressor();compressor.threshold.value=-18;compressor.ratio.value=3;compressor.attack.value=.008;compressor.release.value=.2;
-      this.master.connect(compressor);compressor.connect(this.context.destination);
+      const compressor=this.compressor=this.context.createDynamicsCompressor();
+      this.output=this.context.createGain();this.limiter=this.context.createDynamicsCompressor();
+      this.limiter.knee.value=0;this.limiter.attack.value=.001;this.limiter.release.value=.1;
+      this.master.connect(compressor);compressor.connect(this.output);this.output.connect(this.limiter);this.limiter.connect(this.context.destination);
+      this.configureOutput();
       // A quiet room echo gives sustained parts space without washing out drums.
       const delay=this.context.createDelay(.3),wet=this.context.createGain(),tone=this.context.createBiquadFilter();
       delay.delayTime.value=.085;wet.gain.value=.12;tone.type='lowpass';tone.frequency.value=3200;
@@ -33,7 +37,19 @@ export class MidiSynth {
       this.noise=this.context.createBuffer(1,this.context.sampleRate,this.context.sampleRate);
       const d=this.noise.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
     }
+    if(this.profile==='builtin-enhanced'&&!this.enhancedWaves)this.enhancedWaves=ENHANCED_TIMBRES.map(t=>this.context.createPeriodicWave(new Float32Array(t.h.length+1),new Float32Array([0,...t.h])));
     await this.context.resume();
+  }
+  setProfile(id){this.profile=id==='builtin-enhanced'?'builtin-enhanced':'builtin';this.configureOutput();}
+  configureOutput(){
+    if(!this.output)return;
+    const enhanced=this.profile==='builtin-enhanced';
+    // Makeup gain follows compression, with a final peak limiter. Keep the
+    // user's volume setting independent of the selected instrument player.
+    this.compressor.threshold.value=enhanced?-14:-18;this.compressor.ratio.value=enhanced?4:3;
+    this.compressor.attack.value=enhanced?.003:.008;this.compressor.release.value=enhanced?.16:.2;
+    this.limiter.threshold.value=enhanced?-2:0;this.limiter.ratio.value=enhanced?20:1;
+    this.output.gain.setTargetAtTime(enhanced?1.7:1,this.context.currentTime,.025);
   }
   load(song){this.stop();this.song=song;}
   get time(){return this.playing?Math.min(this.song.duration,this.position+(this.context.currentTime-this.anchor)*this.rate):this.position;}
@@ -61,11 +77,15 @@ export class MidiSynth {
     const amp=Math.max(.0001,(n.velocity??100)/127*(n.volume??100)/127*(n.expression??127)/127*.14);
     const connect=(source,filter)=>{sources.push(source);if(filter){nodes.push(filter);source.connect(filter);filter.connect(gain);}else source.connect(gain);return source;};
     let attack=.003,decay=.1,sustain=.01,release=.05,level=amp,stopAt;
+    const enhanced=this.profile==='builtin-enhanced';
     if(n.ch===9){
       const k=n.pitch;
       // Drum envelopes ring independently of short MIDI note-off events.
       duration=k===46?.32:[49,51,52,55,57,59].includes(k)?.75:k===42||k===44?.06:.18;
-      if(k===35||k===36||[41,43,45,47,48,50,60,61,62,63,64].includes(k)){
+      if(enhanced&&[56,67,68,75,76,77,80,81].includes(k)){
+        const osc=connect(ctx.createOscillator());osc.type='sine';osc.frequency.value=({56:540,67:900,68:1200,75:850,76:1100,77:820,80:1600,81:1900})[k];
+        duration=k>=80?.35:.12;level*=.55;
+      }else if(k===35||k===36||[41,43,45,47,48,50,60,61,62,63,64].includes(k)){
         const osc=connect(ctx.createOscillator());const kick=k<=36;
         osc.frequency.setValueAtTime(kick?145:90*2**((k-41)/15),start);osc.frequency.exponentialRampToValueAtTime(kick?45:70*2**((k-41)/15),start+.1);
         duration=kick?.25:.22;level*=1.35;
@@ -79,11 +99,23 @@ export class MidiSynth {
       }
       decay=duration;sustain=.001;stopAt=start+duration+release;
     }else{
-      const family=Math.max(0,Math.min(15,Math.floor((n.program??0)/8))),t=TIMBRES[family];
+      const program=Math.max(0,Math.min(127,Math.trunc(n.program??0))),family=program>>3;
+      const t=enhanced?toneShape(program,n.velocity??100,n.pitch+this.key+(n.bend??0),ctx.sampleRate):TIMBRES[family];
       attack=t.a;decay=t.d;sustain=t.s;release=t.r;level*=t.g;
       const frequency=440*2**((n.pitch+this.key+(n.bend??0)-69)/12),osc=ctx.createOscillator(),filter=ctx.createBiquadFilter();
-      osc.setPeriodicWave(this.waves[family]);osc.frequency.value=frequency;
+      osc.setPeriodicWave(enhanced?this.enhancedWaves[program]:this.waves[family]);osc.frequency.value=frequency;
       filter.type='lowpass';filter.frequency.value=Math.min(ctx.sampleRate*.45,frequency*(family===4?6:18)+1200);filter.Q.value=.5;connect(osc,filter);
+      if(enhanced){
+        level*=Math.max(.1,((n.velocity??100)/127)**.35);
+        filter.frequency.setValueAtTime(t.attackCutoff,start);
+        filter.frequency.exponentialRampToValueAtTime(t.cutoff,start+Math.min(duration,.18));
+        // Layer only the first 24 sustained voices; dense arrangements keep
+        // their notes while limiting extra oscillators on mobile devices.
+        if(t.spread&&this.voices.size<24){
+          const layer=ctx.createOscillator();layer.setPeriodicWave(this.enhancedWaves[program]);layer.frequency.value=frequency;
+          osc.detune.value=-t.spread;layer.detune.value=t.spread;layer.connect(filter);sources.push(layer);level*=.6;
+        }
+      }
       stopAt=start+duration+release;
     }
     // A note-off during the attack must never create out-of-order automation.
