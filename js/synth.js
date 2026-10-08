@@ -1,5 +1,5 @@
-import {AcousticBank,textureSpec} from './acoustic-bank.js?v=39';
-import {toneShape} from './enhanced-timbres.js?v=39';
+import {AcousticBank,textureSpec} from './acoustic-bank.js?v=40';
+import {toneShape} from './enhanced-timbres.js?v=40';
 // Original harmonic recipes in General MIDI family order. No sampled recordings.
 const TIMBRES=[
  {h:[1,.38,.2,.12,.07],a:.004,d:.65,s:.08,r:.18,g:1}, // piano

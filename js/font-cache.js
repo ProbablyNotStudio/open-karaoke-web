@@ -1,4 +1,4 @@
-import {validateSoundFont} from './soundfonts.js?v=39';
+import {validateSoundFont} from './soundfonts.js?v=40';
 // Keep a Blob rather than a worker-transferable ArrayBuffer. Each engine gets
 // fresh bytes, while changing instruments can safely reuse the saved download.
 export async function cachedSoundFont(font,{read,write,download,onCached=()=>{},onSaveFailure=()=>{}}){

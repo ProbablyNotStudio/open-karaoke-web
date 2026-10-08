@@ -1,4 +1,4 @@
-export function readMidi(file,options,{signal,timeout=20000,workerFactory=()=>new Worker(new URL('./midi-worker.js?v=39',import.meta.url),{type:'module'})}={}){
+export function readMidi(file,options,{signal,timeout=20000,workerFactory=()=>new Worker(new URL('./midi-worker.js?v=40',import.meta.url),{type:'module'})}={}){
  return new Promise((resolve,reject)=>{
   let worker,settled=false;
   const finish=(error,song)=>{if(settled)return;settled=true;clearTimeout(timer);signal?.removeEventListener('abort',abort);worker?.terminate();error?reject(error):resolve(song);};

@@ -1,20 +1,20 @@
-import {loadingDeadline} from './loading.js?v=39';
-import {readMidi} from './midi-loader.js?v=39';
-import {lyricPresentation,lyricFill} from './lyrics.js?v=39';
-import {parseName,parseMidi,parseLRC} from './formats.js?v=39';
-import {SoundFontSynth} from './soundfont-synth.js?v=39';
-import {MAX_SOUNDFONT_BYTES,validateSoundFont,validateSoundFontHeader,downloadSoundFont} from './soundfonts.js?v=39';
+import {loadingDeadline} from './loading.js?v=40';
+import {readMidi} from './midi-loader.js?v=40';
+import {lyricPresentation,lyricFill} from './lyrics.js?v=40';
+import {parseName,parseMidi,parseLRC} from './formats.js?v=40';
+import {SoundFontSynth} from './soundfont-synth.js?v=40';
+import {MAX_SOUNDFONT_BYTES,validateSoundFont,validateSoundFontHeader,downloadSoundFont} from './soundfonts.js?v=40';
 import {CDGDecoder} from './cdg.js';
-import {SUPPORTED,MIDI,unpackZip,songFormat} from './library.js?v=39';
-import {libraryPage,searchText,createSongOrder} from './search.js?v=39';
-import {saveLocalFiles,loadLocalFiles,getLocalFile,clearLocalFiles} from './storage.js?v=39';
-import {cachedSoundFont} from './font-cache.js?v=39';
-import {runImportBatches,importQueue} from './import-batch.js?v=39';
-import {songbookPage} from './catalog.js?v=39';
-import {setupBackgrounds} from './backgrounds.js?v=39';
-import {folderFiles,songFolderSelection} from './folder.js?v=39';
-import {storedFile,fileBlob,fileDigest} from './import-memory.js?v=39';
-import {defaultSoundFont,setupMobileViewport} from './device.js?v=39';
+import {SUPPORTED,MIDI,unpackZip,songFormat} from './library.js?v=40';
+import {libraryPage,searchText,createSongOrder} from './search.js?v=40';
+import {saveLocalFiles,loadLocalFiles,getLocalFile,clearLocalFiles} from './storage.js?v=40';
+import {cachedSoundFont} from './font-cache.js?v=40';
+import {runImportBatches,importQueue} from './import-batch.js?v=40';
+import {songbookPage} from './catalog.js?v=40';
+import {setupBackgrounds} from './backgrounds.js?v=40';
+import {folderFiles,songFolderSelection} from './folder.js?v=40';
+import {storedFile,fileBlob,fileDigest} from './import-memory.js?v=40';
+import {defaultSoundFont,setupMobileViewport} from './device.js?v=40';
 setupMobileViewport(document.getElementById('stageBrowser'));
 let bookPage=0,bookLetter='all';
 let sessionEpoch=0,songAbort=null,leadIn=null;
@@ -39,6 +39,7 @@ if(['builtin','builtin-enhanced'].includes(preferences.soundfont)){
   $('soundFont').value=preferences.soundfont;
   $('fontStatus').textContent=`${preferences.soundfont==='builtin-enhanced'?'Enhanced synth':'Built-in synth'} selected. Ready when you play MIDI.`;
 }
+let restoringLibrary=true,lastRestorePaint=0,lastRestorePhase='';
 const fonts=new Map();let fontBusy=false,fontPromise=null,fontAbort=null;
 let libraryIndex=0,searchTimer;
 let stagePage=0,stageSearchTimer;
@@ -55,7 +56,7 @@ function renderLibrary(){
   const result=libraryPage(songOrder.get(),{query:$('search').value,format:$('formatFilter').value,favoriteOnly,favorites,page:libraryIndex,sort:'title',ordered:true});
   libraryIndex=result.page;const list=result.rows;
   $('songCount').textContent=favoriteOnly?[...songs.keys()].filter(id=>favorites.has(id)).length:songs.size;$('libraryHeading').firstChild.textContent=favoriteOnly?'Favorites ':'Song library ';
-  $('songList').replaceChildren();$('empty').hidden=songs.size>0;
+  $('songList').replaceChildren();$('empty').hidden=restoringLibrary||songs.size>0;
   $('libraryPages').hidden=!songs.size;$('pageSummary').textContent=result.total?`${result.start.toLocaleString()}–${result.end.toLocaleString()} of ${result.total.toLocaleString()} songs`:'No matches';
   $('pagePrevious').disabled=result.page===0;$('pageNext').disabled=result.page===result.pages-1;
   if(!list.length&&songs.size){$('songList').append(node('p','empty','No matching songs. Try another search or format.'));}
@@ -74,7 +75,7 @@ function renderStageSongs(){
  const list=$('stageResults');list.replaceChildren();list.scrollTop=0;
  $('stagePageSummary').textContent=result.total?`${result.start.toLocaleString()}–${result.end.toLocaleString()} of ${result.total.toLocaleString()}`:'No matches';
  $('stagePagePrevious').disabled=stagePage===0;$('stagePageNext').disabled=stagePage===result.pages-1;
- if(!result.rows.length)list.append(node('p','stage-browser-empty',songs.size?'No matches. Try another title, artist or song number.':'Add your songs to the library first, then find them here.'));
+ if(!result.rows.length)list.append(node('p','stage-browser-empty',restoringLibrary?'Your saved songs are loading. Please wait…':songs.size?'No matches. Try another title, artist or song number.':'Add your songs to the library first, then find them here.'));
  for(const song of result.rows){
   const row=node('div','stage-song'),info=node('div','stage-song-info');info.append(node('span','song-number',song.number),node('strong','',song.title),node('small','',song.artist));
   const actions=node('div','stage-song-actions');
@@ -123,7 +124,7 @@ function renderQueue(){
 function pair(song){const stem=song.id.replace(/\.[^.]+$/,'');song.cdg=files.get(stem+'.cdg');song.lrc=files.get(stem+'.lrc');song.format=songFormat(song.file.name,!!song.cdg);}
 const queueImport=importQueue(performImport);
 function importFiles(selected,options={}){return options.restore?performImport(Array.from(selected),options):queueImport(selected,options);}
-async function performImport(selected,{silent=false,restore=false}={}){
+async function performImport(selected,{silent=false,restore=false,onRestoreProgress=()=>{}}={}){
   if(!restore)await localLibraryReady;
   const epoch=sessionEpoch,companions=[];let count=0,skipped=0,errors=[],saveFailed=false;
   const hashes=new Set([...songs.values()].map(song=>song.digest).filter(Boolean));
@@ -134,7 +135,7 @@ async function performImport(selected,{silent=false,restore=false}={}){
   try{
     await runImportBatches(selected,{
       size:25,expand:unpackZip,onIssue:issue=>errors.push(issue),
-      onProgress:({name,input,inputs,processed,total})=>{if(active)$('importProgress').textContent=`Importing ${input} of ${inputs}: ${name}${total?` · ${processed.toLocaleString()} / ${total.toLocaleString()} files`:''} · ${count.toLocaleString()} songs added. Keep this tab open.`;},
+      onProgress:({name,input,inputs,processed,total})=>{if(restore)onRestoreProgress(input,inputs);if(active)$('importProgress').textContent=`Importing ${input} of ${inputs}: ${name}${total?` · ${processed.toLocaleString()} / ${total.toLocaleString()} files`:''} · ${count.toLocaleString()} songs added. Keep this tab open.`;},
       consume:async entries=>{
         if(epoch!==sessionEpoch)throw Error('Import canceled because the library was reset.');
         const records=[];
@@ -354,7 +355,7 @@ function fontOptions(){
 async function loadFontCatalog(){
   fontOptions();if(['builtin','builtin-enhanced'].includes(preferences.soundfont))$('soundFont').value=preferences.soundfont;
   try{
-    const response=await fetch(new URL('../soundfonts.json?v=39',import.meta.url),{signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error('No included fonts');
+    const response=await fetch(new URL('../soundfonts.json?v=40',import.meta.url),{signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error('No included fonts');
     const catalog=await response.json();
     for(const font of catalog.fonts||[]){const url=new URL(font.url,new URL('../soundfonts.json',import.meta.url));if(typeof font.id==='string'&&typeof font.name==='string'&&Number.isSafeInteger(font.bytes)&&font.bytes>=12&&font.bytes<=MAX_SOUNDFONT_BYTES&&url.protocol==='https:')fonts.set(font.id,{...font,url:url.href});}
     if(fonts.has('karaoke-king')){
@@ -429,17 +430,41 @@ document.addEventListener('keydown',e=>{
 });
 renderLibrary();renderQueue();updateControls();requestAnimationFrame(frame);if(location.hash==='#catalog')openSongbook();else if(location.hash==='#favorites')nav(true);
 $('libraryInfo').textContent='Add your own MIDI, ZIP, audio + CDG, or video files. Songs stay on your device.';
+function showRestoreProgress(phase,count=0,total=0){
+  const busy=phase==='reading'||phase==='preparing',now=performance.now();
+  if(busy&&phase===lastRestorePhase&&now-lastRestorePaint<100&&count!==total)return;
+  lastRestorePaint=now;lastRestorePhase=phase;
+  $('libraryRestore').hidden=phase==='ready'&&!songs.size;
+  $('libraryRestore').classList.toggle('is-ready',phase==='ready');$('libraryRestore').classList.toggle('is-error',phase==='error');
+  $('restoreIcon').textContent=busy?'':phase==='error'?'!':'✓';
+  $('restoreTitle').textContent=phase==='reading'?'Loading your saved songs…':phase==='preparing'?'Preparing your song library…':phase==='error'?'Some saved files couldn’t load':'Your saved songs are ready';
+  $('restoreDetail').textContent=phase==='reading'?(count?`${count.toLocaleString()} saved files read. Please keep this tab open.`:'Checking the songs saved in this browser. Please keep this tab open.'):phase==='preparing'?`${count.toLocaleString()} of ${total.toLocaleString()} saved files prepared. Almost ready to sing.`:phase==='error'?$('storageStatus').textContent:`${songs.size.toLocaleString()} songs restored. Search for a song and add it to your queue.`;
+  $('restoreProgress').hidden=!busy;
+  if(phase==='preparing'&&total){$('restoreProgress').max=total;$('restoreProgress').value=count;}else $('restoreProgress').removeAttribute('value');
+  $('restoreRetry').hidden=phase!=='error';$('restoreDismiss').hidden=busy||phase==='error';
+}
+function finishRestore(failed=false){
+  restoringLibrary=false;showRestoreProgress(failed?'error':'ready');
+  for(const id of ['import','emptyImport','folderImport'])$(id).disabled=false;
+  document.querySelector('.library').setAttribute('aria-busy','false');renderLibrary();
+}
+$('restoreRetry').onclick=()=>location.reload();$('restoreDismiss').onclick=()=>$('libraryRestore').hidden=true;
 async function restoreLocalLibrary(){
+ showRestoreProgress('reading');
+ for(const id of ['import','emptyImport','folderImport'])$(id).disabled=true;
+ document.querySelector('.library').setAttribute('aria-busy','true');
+ let failed=false;
  try{
-  const results=await Promise.allSettled([loadLocalFiles('songs',{mapRecord:record=>({...record,file:storedFile(record,getLocalFile)}),onProgress:count=>{$('storageStatus').textContent=`Reading saved songs: ${count.toLocaleString()}…`;}}),loadLocalFiles('fonts',{mapRecord:record=>({...record,file:storedFile(record,getLocalFile,'fonts')})})]);
+  const results=await Promise.allSettled([loadLocalFiles('songs',{mapRecord:record=>({...record,file:storedFile(record,getLocalFile)}),onProgress:count=>{showRestoreProgress('reading',count);$('storageStatus').textContent=`Reading saved songs: ${count.toLocaleString()}…`;}}),loadLocalFiles('fonts',{mapRecord:record=>({...record,file:storedFile(record,getLocalFile,'fonts')})})]);
   const savedSongs=results[0].status==='fulfilled'?results[0].value:[];
   const personalFonts=(results[1].status==='fulfilled'?results[1].value:[]).filter(font=>!font.hosted);
   for(const font of personalFonts)fonts.set(font.id,font);
-  if(savedSongs.length){$('storageStatus').textContent=`Preparing ${savedSongs.length.toLocaleString()} saved songs…`;await importFiles(savedSongs.map(e=>({...e,deferMidi:true})),{silent:true,restore:true});}
-  const failures=results.filter(result=>result.status==='rejected');
+  if(savedSongs.length){$('storageStatus').textContent=`Preparing ${savedSongs.length.toLocaleString()} saved songs…`;showRestoreProgress('preparing',0,savedSongs.length);await importFiles(savedSongs.map(e=>({...e,deferMidi:true})),{silent:true,restore:true,onRestoreProgress:(count,total)=>showRestoreProgress('preparing',count,total)});}
+  const failures=results.filter(result=>result.status==='rejected');failed=Boolean(failures.length);
   $('storageStatus').textContent=`Restored ${songs.size.toLocaleString()} songs and ${personalFonts.length} personal SoundFonts from this browser.${failures.length?' '+(failures[0].reason?.message||'Some saved files could not be read.')+' Saved files have not been deleted. You can still add files for this session.':''}`;
   $('storageRetry').hidden=!failures.length;
- }catch(error){$('storageStatus').textContent=`${error.message||'Browser storage is unavailable.'} Saved files have not been deleted. You can still add files for this session.`;$('storageRetry').hidden=false;}
+ }catch(error){failed=true;$('storageStatus').textContent=`${error.message||'Browser storage is unavailable.'} Saved files have not been deleted. You can still add files for this session.`;$('storageRetry').hidden=false;}
+ finally{finishRestore(failed);}
 }
 $('storageRetry').onclick=()=>location.reload();
 const localLibraryReady=restoreLocalLibrary();

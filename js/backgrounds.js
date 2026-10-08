@@ -1,5 +1,5 @@
-import {storedFile,fileBlob} from './import-memory.js?v=39';
-import {saveLocalFiles,loadLocalFiles,getLocalFile,clearLocalFiles} from './storage.js?v=39';
+import {storedFile,fileBlob} from './import-memory.js?v=40';
+import {saveLocalFiles,loadLocalFiles,getLocalFile,clearLocalFiles} from './storage.js?v=40';
 export function backgroundPath(path){
  path=String(path||'').replace(/\\/g,'/');
  // Android's document picker can encode the actual relative path inside a

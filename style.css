@@ -124,3 +124,12 @@ body.stage-expanded-open{overflow:hidden}
 .sticky-player{position:sticky;top:8px;z-index:8;background:var(--bg);border-radius:14px;box-shadow:0 8px 20px #0005;overflow-anchor:none}
 @media(max-width:560px){.sticky-player{top:max(0px,env(safe-area-inset-top))}.sticky-player .stage:not(:fullscreen):not(.stage-expanded){height:230px}.sticky-player .stage:not(:fullscreen):not(.stage-expanded) .stage-orbit{display:none}.sticky-player .stage:not(:fullscreen):not(.stage-expanded) .stage-content{padding:48px 14px 40px}.sticky-player .stage:not(:fullscreen):not(.stage-expanded) .stage-content h2{font-size:23px}}
 @media(max-height:500px){.sticky-player .stage:not(:fullscreen):not(.stage-expanded){height:170px}.sticky-player .transport{display:none}.sticky-player .stage:not(:fullscreen):not(.stage-expanded) .stage-orbit{display:none}.sticky-player .stage:not(:fullscreen):not(.stage-expanded) .stage-content{padding:38px 18px 28px}.sticky-player .stage:not(:fullscreen):not(.stage-expanded) .stage-content h2{font-size:20px}}
+
+.library-restore{display:grid;grid-template-columns:28px minmax(0,1fr) auto;align-items:center;gap:14px;padding:16px 18px;margin-bottom:24px;border:1px solid #71608a;border-radius:12px;background:#251e32;color:var(--ink)}
+.restore-copy strong{display:block;font-size:14px;font-weight:600}.restore-copy p{font-size:12px;color:var(--muted);line-height:1.6;margin:5px 0 0;overflow-wrap:anywhere}
+.restore-copy progress{display:block;width:100%;height:5px;margin-top:12px;accent-color:var(--purple);border:0;border-radius:4px;overflow:hidden}
+.restore-spinner{display:grid;place-items:center;width:26px;height:26px;border:3px solid #c5a4ff30;border-top-color:var(--purple);border-radius:50%;animation:restore-spin .8s linear infinite}
+.library-restore.is-ready .restore-spinner,.library-restore.is-error .restore-spinner{animation:none;border:0;background:#afe3ca18;color:var(--mint);font-size:18px}.library-restore.is-error{border-color:#ab8157}.library-restore.is-error .restore-spinner{background:#dcb87920;color:#efd08a}
+#restoreDismiss{font-size:22px;min-width:36px;min-height:36px}@keyframes restore-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.restore-spinner{animation:none}}
+@media(max-width:560px){.library-restore{padding:14px 12px;gap:10px;grid-template-columns:26px minmax(0,1fr)}.library-restore>button{grid-column:2;justify-self:start}.restore-copy strong{font-size:14px}}
