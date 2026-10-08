@@ -1,4 +1,4 @@
-import {repairLegacyMidi} from './midi-repair.js?v=36';
+import {repairLegacyMidi} from './midi-repair.js?v=37';
 export function parseName(name, fallback=1) {
   const stem=name.replace(/\.[^.]+$/, '');
   const parts=stem.split(/\s+-\s+/);

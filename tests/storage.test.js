@@ -28,3 +28,13 @@ test('saved files load in pages without missing boundary records and report prog
 test('stalled transaction times out, aborts and closes the stale connection',async()=>{
  const {storage,stats}=mockStorage([],{stall:true});await assert.rejects(storage.loadLocalFiles('songs'),/stopped responding/);assert.equal(stats().aborts,1);assert.equal(stats().closes,1);
 });
+test('clearing songs and SoundFonts operates on only the selected store',async()=>{
+ const saved={songs:['song'],fonts:['font'],backgrounds:['video']},operations=[];
+ const db={close(){},transaction(store,mode){operations.push({store,mode});const tx={objectStore(name){return {clear(){saved[name]=[];queueMicrotask(()=>tx.oncomplete());}};}};return tx;}};
+ const storage=createLibraryStorage({database:()=>({open(){const request={};queueMicrotask(()=>{request.result=db;request.onsuccess();});return request;}})});
+ await storage.clearLocalFiles('songs');
+ assert.deepEqual(saved,{songs:[],fonts:['font'],backgrounds:['video']});
+ saved.songs=['restored song'];await storage.clearLocalFiles('fonts');
+ assert.deepEqual(saved,{songs:['restored song'],fonts:[],backgrounds:['video']});
+ assert.deepEqual(operations,[{store:'songs',mode:'readwrite'},{store:'fonts',mode:'readwrite'}]);
+});
