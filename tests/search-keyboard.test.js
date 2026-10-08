@@ -30,6 +30,7 @@ test('touch search opens read-only with inputmode none and keypad changes the qu
   container.children[0].children[0].onclick();assert.equal(input.value,'1');assert.equal(changes,1);
   toggle.onclick();assert.equal(container.hidden,true);assert.equal(input.readOnly,true);
   input.focus();assert.equal(container.hidden,false);
+  const desktop=setupSearchKeyboard({input,container,toggle,onChange(){changes++;},touch:()=>false});desktop.open({force:true,numeric:true});assert.equal(input.readOnly,true);assert.equal(container.dataset.mode,'numbers');assert.equal(container.hidden,false);
  }finally{globalThis.document=original;}
 });
 

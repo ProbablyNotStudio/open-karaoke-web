@@ -45,5 +45,5 @@ export function setupSearchKeyboard({input,container,wrapper=container,toggle,on
  toggle.onclick=()=>show(!enabled);
  input.addEventListener('focus',()=>{if(touch())show(true);});
  render();show(false);
- return {open(){show(touch()||enabled);}};
+ return {open({force=false,numeric=false}={}){if(numeric){numbers=true;render();}show(force||touch()||enabled);}};
 }
