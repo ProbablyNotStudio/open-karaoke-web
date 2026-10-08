@@ -35,7 +35,10 @@ let favorites=new Set(readJSON('open-karaoke-favorites',[]));
 let preferences={lines:2,offset:0,melody:-1,auto:true,volume:65,textEncoding:'auto',soundfont:defaultSoundFont(),background:'none',backgroundFolder:'all',...readJSON('open-karaoke-settings',{})};
 // Restore generated instruments immediately, even while a large saved song
 // library is still loading or the included-font catalog is unavailable.
-if(['builtin','builtin-enhanced'].includes(preferences.soundfont))$('soundFont').value=preferences.soundfont;
+if(['builtin','builtin-enhanced'].includes(preferences.soundfont)){
+  $('soundFont').value=preferences.soundfont;
+  $('fontStatus').textContent=`${preferences.soundfont==='builtin-enhanced'?'Enhanced synth':'Built-in synth'} selected. Ready when you play MIDI.`;
+}
 const fonts=new Map();let fontBusy=false,fontPromise=null,fontAbort=null;
 let libraryIndex=0,searchTimer;
 let stagePage=0,stageSearchTimer;
