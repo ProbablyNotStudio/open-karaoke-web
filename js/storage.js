@@ -26,7 +26,7 @@ export function createLibraryStorage({database=()=>globalThis.indexedDB,keyRange
    try{tx=db.transaction(stores,mode);tx.oncomplete=()=>finish();tx.onabort=()=>finish(tx.error||Error('Browser storage operation was interrupted.'));tx.onerror=()=>{};work(tx,value=>{result=value;},finish);}catch(error){finish(error);}
   });
  }
- async function saveLocalFiles(store,records){if(records.length)await transaction(store,'readwrite',tx=>{for(const record of records)tx.objectStore(store).put(record);});}
+ async function saveLocalFiles(store,records){if(records.length){await transaction(store,'readwrite',tx=>{for(const record of records)tx.objectStore(store).put(record);});globalThis.dispatchEvent?.(new Event('local-files-changed'));}}
  async function loadLocalFiles(store,{onProgress=()=>{},batchSize=store==='songs'?50:1,mapRecord=record=>record}={}){
   const records=[];let after;
   do{
@@ -41,8 +41,23 @@ export function createLibraryStorage({database=()=>globalThis.indexedDB,keyRange
  }
  async function getLocalFile(store,id){return transaction(store,'readonly',(tx,set,fail)=>{const request=tx.objectStore(store).get(id);request.onsuccess=()=>set(request.result);request.onerror=()=>fail(request.error);});}
  async function clearLocalLibrary(){return transaction(['songs','fonts'],'readwrite',tx=>{tx.objectStore('songs').clear();tx.objectStore('fonts').clear();});}
- async function clearLocalFiles(store){return transaction(store,'readwrite',tx=>tx.objectStore(store).clear());}
- return {openLibrary,saveLocalFiles,loadLocalFiles,getLocalFile,clearLocalLibrary,clearLocalFiles};
+ async function clearLocalFiles(store){await transaction(store,'readwrite',tx=>tx.objectStore(store).clear());globalThis.dispatchEvent?.(new Event('local-files-changed'));}
+ async function localStorageUsage(){
+  const totals={};
+  // Bounded pages: inspect Blob.size without reading audio or retaining files.
+  for(const store of ['songs','fonts','backgrounds']){
+   let after;const total={count:0,bytes:0};
+   do{
+    const page=await transaction(store,'readonly',(tx,set,fail)=>{const request=tx.objectStore(store).getAll(after===undefined?null:keyRange().lowerBound(after,true),100);request.onsuccess=()=>{const records=request.result;set({count:records.length,bytes:records.reduce((sum,record)=>sum+Math.max(0,Number(record.file?.size)||0),0),after:records.at(-1)?.id});};request.onerror=()=>fail(request.error);});
+    total.count+=page.count;total.bytes+=page.bytes;
+    if(page.count<100)break;after=page.after;
+    await new Promise(resolve=>setTimeout(resolve,0));
+   }while(true);
+   totals[store]=total;
+  }
+  return totals;
+ }
+ return {openLibrary,saveLocalFiles,loadLocalFiles,getLocalFile,clearLocalLibrary,clearLocalFiles,localStorageUsage};
 }
 const storage=createLibraryStorage();
-export const {openLibrary,saveLocalFiles,loadLocalFiles,getLocalFile,clearLocalLibrary,clearLocalFiles}=storage;
+export const {openLibrary,saveLocalFiles,loadLocalFiles,getLocalFile,clearLocalLibrary,clearLocalFiles,localStorageUsage}=storage;

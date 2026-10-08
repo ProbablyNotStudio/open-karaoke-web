@@ -38,3 +38,13 @@ test('clearing songs and SoundFonts operates on only the selected store',async()
  assert.deepEqual(saved,{songs:['restored song'],fonts:[],backgrounds:['video']});
  assert.deepEqual(operations,[{store:'songs',mode:'readwrite'},{store:'fonts',mode:'readwrite'}]);
 });
+
+test('usage totals every category across pages without reading file contents',async()=>{
+ const original=Array.from({length:207},(_,i)=>({id:String(i).padStart(3,'0'),file:{size:10,arrayBuffer(){throw Error('Must not read file bytes');}}}));
+ const stores={songs:original,fonts:[{id:'f',file:{size:4096}}],backgrounds:[{id:'v',file:{size:2048}}]};
+ const pages=[];
+ const db={close(){},transaction(store){const tx={objectStore(){return {getAll(range,count){pages.push({store,count});const request={};queueMicrotask(()=>{request.result=stores[store].filter(r=>!range||r.id>range.after).slice(0,count);request.onsuccess();tx.oncomplete();});return request;}};}};return tx;}};
+ const storage=createLibraryStorage({database:()=>({open(){const request={};queueMicrotask(()=>{request.result=db;request.onsuccess();});return request;}}),keyRange:()=>({lowerBound:after=>({after})})});
+ assert.deepEqual(await storage.localStorageUsage(),{songs:{count:207,bytes:2070},fonts:{count:1,bytes:4096},backgrounds:{count:1,bytes:2048}});
+ assert.equal(pages.length,5);assert.ok(pages.every(page=>page.count===100));
+});

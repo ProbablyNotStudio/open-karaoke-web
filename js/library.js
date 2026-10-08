@@ -33,7 +33,7 @@ export function catalogEntries(catalog,baseURL,fetcher=fetch){
 export function unpackZip(file){
   if(file.size>ARCHIVE_LIMITS.compressed)return Promise.reject(Error('ZIP is larger than 128 MB. Split it into smaller archives.'));
   return new Promise((resolve,reject)=>{
-    const worker=new Worker(new URL('./zip-worker.js?v=40',import.meta.url),{type:'module'});
+    const worker=new Worker(new URL('./zip-worker.js?v=41',import.meta.url),{type:'module'});
     let finished=false;
     const finish=(error,entries)=>{if(finished)return;finished=true;clearTimeout(timer);worker.terminate();error?reject(error):resolve(entries);};
     const timer=setTimeout(()=>finish(Error('ZIP extraction took too long. Try a smaller archive.')),20000);
